@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # setup-node's npm cache requires a lockfile. The repo starts as a
+      # skeleton, so detect it first and only enable caching once one exists.
+      - name: Detect lockfile
+        id: lock
+        run: |
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            echo "has=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No package-lock.json yet; npm cache disabled for this run."
+          fi
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: "${{ steps.lock.outputs.has == 'true' && 'npm' || '' }}"
+
+      - name: Install dependencies
+        run: |
+          if [ ! -f package.json ]; then
+            echo "::warning::package.json not present yet; skipping install."
+            exit 0
+          fi
+          npm ci || npm install
+
+      - name: Test
+        run: |
+          if [ ! -f package.json ]; then
+            echo "::warning::package.json not present yet; skipping tests."
+            exit 0
+          fi
+          if [ "$(npm pkg get scripts.test)" = "{}" ]; then
+            echo "::notice::No \"test\" script defined; skipping npm test."
+          else
+            npm test
+          fi
