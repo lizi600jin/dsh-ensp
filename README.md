@@ -115,9 +115,39 @@ interface GigabitEthernet0/0/0
 
 ### 2. MCP server
 
-> 接口已预留（`src/mcp/server.mjs`），当前版本 **尚未实现**，v0.2 提供。
+包内自带一个零依赖的 MCP server（stdio + 换行分隔的 JSON-RPC 2.0，不依赖官方 SDK），把核心能力暴露成工具。
 
-计划暴露为 MCP 工具的四个操作，与 CLI 一一对应：`ensp_up`、`ensp_apply`、`ensp_status`、`ensp_probe`。接入后可在 Claude Desktop、Cursor 等任意 MCP 客户端里用自然语言驱动实验，例如「把 lab.topo 的设备都起来，然后下发 configs 目录」。
+```json
+{
+  "mcpServers": {
+    "ensp": {
+      "command": "npx",
+      "args": ["-y", "dsh-ensp", "mcp"]
+    }
+  }
+}
+```
+
+> 全局安装会额外提供 `dsh-ensp-mcp` 命令，等价写法是 `"command": "dsh-ensp-mcp"` 且不需要 `args`。
+> 客户端配置位置：Claude Desktop 是 `claude_desktop_config.json`，Cursor 是 `~/.cursor/mcp.json`。
+
+暴露的工具：
+
+| 工具 | 作用 |
+|---|---|
+| `ensp_status` | eNSP 进程、窗口、当前锚点，以及各设备控制台是否应答 |
+| `ensp_open` | 启动 eNSP 并打开指定拓扑，返回 pid 与窗口句柄 |
+| `ensp_start` | 启动全部设备（自动标定 → 点击 → 最小化 → 逐台等就绪） |
+| `ensp_stop` | 停止全部设备 |
+| `ensp_apply` | 向单台设备下发配置文本 |
+| `ensp_apply_dir` | 按 `<设备名>.cfg` 约定批量下发整个目录 |
+| `ensp_query` | 在设备上执行只读命令并取回输出 |
+| `ensp_probe` | 只测量不点击，报告工具栏按钮锚点 |
+| `ensp_build_topology` | 从设备/链路描述生成 `.topo` 文件 |
+| `ensp_preset_config` | 生成常用实验预设（如双 PC 同 VLAN） |
+
+工具返回结构化 JSON 而不是散文，便于模型自己判断下一步；工具内部的失败也以 `isError` 结果返回，而不是协议错误，
+这样模型能看到原因并自行重试。
 
 ### 3. DeepSeek Harness 插件
 
@@ -197,7 +227,7 @@ if (!r.ok) console.error(`第 ${r.failedAt.line} 行失败: ${r.failedAt.error}`
 - **eNSP 升级或 DPI/分辨率变化后需要重新标定**：先让 eNSP 开着窗口，再跑 `ensp probe` 确认能找到绿色三角与红色方块。标定失败会退回默认锚点并在输出里标记为 `default`，此时点击可能落空。
 - **控制台端口来自 `.topo` 的 `com_port`**。如果拓扑是用别的工具生成或手工改过，端口可能为空或过期，`status` 会显示 `not answering`。
 - **需要管理员权限**。eNSP 以普通权限运行时，虚拟网卡创建会失败，表现为设备起不来而没有任何明显报错。
-- **MCP server 与 DSH 插件仍在实现中**（见[三种用法](#三种用法)）。
+- **MCP server 已可用，DSH 插件仍在实现中**（见[三种用法](#三种用法)）。
 
 ## 开发
 
@@ -212,7 +242,9 @@ npm test        # node --test
 ```
 src/
 ├── cli/ensp.mjs        # 命令行入口：up / apply / status / probe / stop
+├── mcp/server.mjs      # 零依赖 MCP server：stdio + JSON-RPC 2.0
 └── core/
+    ├── build.mjs       # 从描述生成拓扑：模型接口表、自动布局、锚点偏移
     ├── topology.mjs    # .topo 读写、设备与链路解析、接口索引映射
     ├── launcher.mjs    # 进程/窗口定位、DPI 感知、工具栏点击、就绪轮询
     ├── calibrate.mjs   # 按颜色特征标定工具栏锚点

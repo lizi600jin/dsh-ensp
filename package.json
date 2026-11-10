@@ -26,7 +26,8 @@
     "./dsh": "./src/dsh/index.mjs"
   },
   "bin": {
-    "ensp": "src/cli/ensp.mjs"
+    "ensp": "src/cli/ensp.mjs",
+    "dsh-ensp-mcp": "src/mcp/server.mjs"
   },
   "files": [
     "src",
@@ -36,8 +37,8 @@
     "cordis.patch.yml"
   ],
   "scripts": {
-    "test": "node --test tests/",
-    "probe": "node src/cli/probe.mjs"
+    "test": "node --test",
+    "probe": "node src/cli/ensp.mjs probe"
   },
   "engines": {
     "node": ">=18"

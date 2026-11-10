@@ -24,8 +24,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # setup-node's npm cache requires a lockfile. The repo starts as a
-      # skeleton, so detect it first and only enable caching once one exists.
+      # setup-node's npm cache requires a lockfile, and `npm ci` hard-fails
+      # without one. Detect it first so a lockfile-less clone still works.
       - name: Detect lockfile
         id: lock
         run: |
@@ -48,7 +48,23 @@ jobs:
             echo "::warning::package.json not present yet; skipping install."
             exit 0
           fi
-          npm ci || npm install
+          if [ "${{ steps.lock.outputs.has }}" = "true" ]; then
+            npm ci
+          else
+            # No lockfile: there is nothing to resolve, and peer deps are
+            # optional, so a plain install is enough to make the tree usable.
+            npm install --no-audit --no-fund
+          fi
+
+      # Every module is ESM, so a bare parse check catches broken imports
+      # before the test runner gets a chance to trip over them.
+      - name: Syntax check
+        run: |
+          if [ ! -d src ]; then
+            echo "::notice::No src/ directory; skipping syntax check."
+            exit 0
+          fi
+          find src -name '*.mjs' -print0 | xargs -0 -r -n1 node --check
 
       - name: Test
         run: |
@@ -58,6 +74,12 @@ jobs:
           fi
           if [ "$(npm pkg get scripts.test)" = "{}" ]; then
             echo "::notice::No \"test\" script defined; skipping npm test."
-          else
-            npm test
+            exit 0
           fi
+          # `node --test <dir>` exits non-zero when the directory is absent, so
+          # confirm there is something to run before invoking the script.
+          if ! find tests -name '*.test.mjs' -print -quit 2>/dev/null | grep -q .; then
+            echo "::notice::No test files under tests/; nothing to run yet."
+            exit 0
+          fi
+          npm test
