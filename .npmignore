@@ -1,0 +1,39 @@
+# npm publishes by allowlist: the "files" field in package.json is the source
+# of truth. This file is a second line of defence for the day that field is
+# edited or dropped, and it documents what must never reach the registry.
+
+# Scratch experiments and local probes live at the repo root
+_scratch/
+_scratch*
+_tmp*
+verify_off.mjs
+scratch/
+
+# Tests are not shipped; consumers need the modules, not our harness
+tests/
+test/
+coverage/
+*.test.mjs
+*.spec.mjs
+
+# Dependencies (npm always excludes this, listed for clarity)
+node_modules/
+
+# CI / repo plumbing
+.github/
+.editorconfig
+.gitignore
+.npmignore
+
+# Local editor and OS noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs and local env
+*.log
+npm-debug.log*
+.env
+.env.*

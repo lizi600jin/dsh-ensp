@@ -1,0 +1,62 @@
+{
+  "name": "dsh-ensp",
+  "version": "0.1.0",
+  "description": "Automate Huawei eNSP labs end to end: build the topology, boot the devices, and push configuration line by line with real per-command verification — from the CLI, an MCP client, or the DeepSeek Harness.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "ensp",
+    "huawei",
+    "vrp",
+    "network-simulation",
+    "mcp"
+  ],
+  "type": "module",
+  "license": "MIT",
+  "main": "src/core/index.mjs",
+  "exports": {
+    ".": "./src/core/index.mjs",
+    "./core": "./src/core/index.mjs",
+    "./topology": "./src/core/topology.mjs",
+    "./console": "./src/core/console.mjs",
+    "./launcher": "./src/core/launcher.mjs",
+    "./provision": "./src/core/provision.mjs",
+    "./mcp": "./src/mcp/server.mjs",
+    "./dsh": "./src/dsh/index.mjs"
+  },
+  "bin": {
+    "ensp": "src/cli/ensp.mjs"
+  },
+  "files": [
+    "src",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "test": "node --test tests/",
+    "probe": "node src/cli/probe.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-client-ui": "*",
+    "@deepseek-ai/dsh-tools": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-client-ui": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  }
+}
