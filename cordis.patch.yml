@@ -1,0 +1,19 @@
+# ============================================================================
+# dsh-ensp — DSH bundle patch
+# ============================================================================
+# 插件的挂载声明。DSH 启动时按 bundle 层栈叠加各插件 patch，本文件把
+# eNSP 自动化插件插入当前 profile 的配置树。
+#
+# 安装方式：
+#   dsh plugin --profile desktop add dsh-ensp
+# 或从本地目录安装：
+#   dsh plugin --profile desktop add link:<本目录绝对路径>
+#
+# 该行发布 Service 吗？没有。它只消费 host 平面的 `tools`，用于注册
+# ensp_* 系列模型工具，因此按 host-composition 的规则裸挂即可，
+# 不需要 isolate realm。
+# ============================================================================
+
+- insert:
+    - id: dsh-ensp
+      name: dsh-ensp

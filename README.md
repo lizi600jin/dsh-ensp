@@ -1,121 +1,150 @@
+<p align="center">
+  <strong>中文</strong>
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/dsh-ensp"><img alt="npm" src="https://img.shields.io/npm/v/dsh-ensp?style=flat-square&color=6c5ce7"></a>
+  <a href="https://www.npmjs.com/package/dsh-ensp"><img alt="npm downloads" src="https://img.shields.io/npm/dm/dsh-ensp?style=flat-square&color=4b6fff"></a>
+  <a href="https://github.com/lizi600jin/dsh-ensp/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/lizi600jin/dsh-ensp?style=flat-square&color=eab308"></a>
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square"></a>
+</p>
+
 # dsh-ensp
 
-> 把华为 eNSP 网络实验从「手点 GUI」变成「一条命令」：生成拓扑、一键启停设备、逐条下发配置并精确定位错误。
+面向华为 eNSP 网络实验的自动化工具。它把搭建实验的完整流程串起来：生成拓扑文件、打开、启动设备、按顺序下发配置，并在每条命令执行后核对结果。
 
-[![npm version](https://img.shields.io/npm/v/dsh-ensp.svg)](https://www.npmjs.com/package/dsh-ensp)
-[![CI](https://github.com/lizi600jin/dsh-ensp/actions/workflows/ci.yml/badge.svg)](https://github.com/lizi600jin/dsh-ensp/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node](https://img.shields.io/node/v/dsh-ensp.svg)](https://nodejs.org)
+提供三种调用方式，共用同一套核心实现：
 
-`dsh-ensp` 是一套自动化 Huawei eNSP（Enterprise Network Simulation Platform）实验的工程工具。eNSP 官方没有开放 API，所有「把设备开起来」的路径最终都只能落到它的 GUI 上；这个项目把这段不可编程的部分封装成可编程、可复现、可测试的步骤。
+- CLI：`ensp up`、`ensp apply`、`ensp preset`，适合脚本化批处理。
+- MCP Server：供 Claude Desktop、Cursor 等任意 MCP 客户端调用。
+- DeepSeek Harness 插件：以模型工具的形式在会话内使用。
 
----
+## 背景：eNSP 缺少自动化接口
 
-## Features
+eNSP 是华为官方的网络仿真器，但没有对外提供控制设备的接口。下面几种思路都经过实测，均不可行。
 
-- **拓扑生成与解析** — 读写 eNSP 原生 `.topo`（XML）文件：生成拓扑、解析设备与链路、把每台设备的 `com_port` 映射出来，供后续控制台直连使用。
-- **一键启停设备** — 自动定位 eNSP 主窗口，按颜色特征标定工具栏按钮（绿色三角 = 开启设备，红色方块 = 停止设备），点击后**立即最小化窗口**，把桌面还给使用者。
-- **逐条配置下发与错误定位** — 一次只发一条命令，等提示符回来再发下一条；任一错误立刻中断整批，回报 **行号 + 原始回显**，而不是继续制造几十条连锁失败。
-- **就绪主动探测** — 每台设备独立轮询自己的控制台 TCP 端口，直到 VRP 真的回出提示符才算就绪；不用固定 `sleep`，慢设备不会被误判失败，快设备也不必空等。
-- **视图层级校验** — 用提示符（而非计数器）判断当前处于用户视图 / 系统视图 / 子视图，`quit` 多退一层后会自动纠正，避免后续命令全部落在错误的视图里。
-
-## Requirements
-
-| 项 | 要求 |
+| 思路 | 实测结果 |
 |---|---|
-| 操作系统 | **Windows**（驱动 GUI 依赖 Win32 API，仅 Windows 可用） |
-| eNSP | Huawei eNSP 已安装，且 **以管理员身份运行**（否则虚拟网卡与设备启动会失败） |
-| Node.js | **>= 18** |
-| 虚拟化 | VirtualBox（eNSP 自带，一般无需单独安装） |
-| 显示 | 任意 DPI；首次使用建议跑一次 `ensp probe` 标定 |
+| 修改 `.topo` 中的 `bootmode=1` 让设备随拓扑自启 | 无效。拓扑打开后设备仍处于关闭状态 |
+| 用 VBoxManage 直接启动虚拟机 | 虚拟机可以启动，但无法获得控制台。`AR_Base` 的 `uart1="off"`，控制台由虚拟机内的代理程序反连 eNSP 分配的 `-consoleip/-consoleport`，该端口只有客户端知道 |
+| 连接 eNSP 的控制端口（65514、7301） | 拒绝连接，或协议未公开 |
+| 向窗口发送 `WM_COMMAND` 模拟点击 | 盲扫命令 id 区间会导致 eNSP 崩溃 |
+| 抓取窗口截图定位按钮 | 画布由 DirectX 渲染，`PrintWindow` 与 `WM_PRINT` 均返回全黑图像 |
 
-> **管理员权限**是硬性要求：eNSP 客户端本身需要提权才能创建虚拟网卡（VirtualBox Host-Only）并启动设备。请在「以管理员身份运行」的终端里执行 `ensp` 命令，或先手动以管理员身份启动 eNSP。
+结论是启动设备只能通过驱动图形界面完成。本项目解决了这一环，其余可以自动化的部分也做了实现。
 
-## Install
+## 功能
+
+### 拓扑生成
+
+从 eNSP 自带的 40 个样例拓扑中反推出完整的格式规则，记录在 [`docs/ENSP-FORMAT.md`](docs/ENSP-FORMAT.md)。生成的文件可以被 eNSP 正常打开并正确显示。
+
+```js
+import { twoPcLab, writeTopology } from 'dsh-ensp'
+
+const topo = twoPcLab({ vlan: 10, subnet: '192.168.10' })
+await writeTopology('lab.topo', topo)
+```
+
+也可以从零构建：
+
+```js
+import { buildTopology, autoLayout } from 'dsh-ensp'
+
+const topo = autoLayout(
+  buildTopology()
+    .add('R1', 'AR2220', { x: 180, y: 120 })
+    .add('R2', 'AR2220', { x: 460, y: 260 })
+    .link('R1', 'GigabitEthernet0/0/0', 'R2', 'GigabitEthernet0/0/0')
+    .finish()
+)
+```
+
+### 启动与停止设备
+
+工具栏按钮的位置通过颜色特征实时定位：绿色三角对应“开启设备”，红色方块对应“停止设备”。这一方式不依赖硬编码像素，更换 eNSP 版本、分辨率或 DPI 缩放后可以重新标定。
+
+```
+ensp probe          # 重新标定并列出所有候选位置
+ensp up lab.topo    # 打开拓扑、标定、点击启动、逐台确认就绪、最小化窗口
+```
+
+就绪状态按设备逐一判定。每台设备独立轮询自身控制台端口，直到 VRP 返回提示符为止。实测同一批设备的启动耗时为 34 秒至 70 秒不等，采用固定等待时间必然出现偏早或偏晚的情况。
+
+窗口在启动完成后自动最小化，桌面可立即使用；点击 eNSP 图标即可重新唤出。
+
+### 配置下发与校验
+
+下发过程逐条进行，不在一次写入中塞入整段脚本：
+
+```js
+import { pushConfig } from 'dsh-ensp'
+
+const result = await pushConfig({
+  device: 'SW1',
+  port: 2000,
+  script: `
+    system-view
+    vlan 10
+     quit
+    interface GigabitEthernet0/0/1
+     port link-type access
+     port default vlan 10
+     quit
+  `,
+})
+
+// 失败时 result.ok 为 false，附带以下字段：
+//   failedAt.line     行号
+//   failedAt.command  出错的命令
+//   failedAt.error    VRP 原始错误信息
+//   failedAt.output   完整回显
+```
+
+实现遵循三条规则：
+
+| 规则 | 依据 |
+|---|---|
+| 每条命令等到提示符返回后才发送下一条 | 若连续写入，错误会堆叠在一起，首个原因被掩盖 |
+| 任一命令出错即中断整批 | 后续命令通常连锁失败，只会增加噪声 |
+| 视图层级由提示符判断 | 多执行一次 `quit` 会使后续命令全部落入错误的视图 |
+
+### 场景预设
+
+内置 23 个配置场景，覆盖 eNSP 官方 40 个实验的核心内容，并包含本项目实测验证的 IS-IS 多级别配置。
 
 ```bash
-# 全局安装（推荐，直接获得 ensp 命令）
-npm i -g dsh-ensp
-
-# 或作为项目依赖
-npm i dsh-ensp
+ensp preset                      # 按难度列出全部场景
+ensp preset ospf-single          # 查看指定场景的配置方向
+ensp preset --search bgp         # 按关键词搜索
 ```
 
-全局安装后 `ensp` 即可用；作为依赖安装时可通过 `npx ensp` 调用，或在代码里 `import` 核心模块（见[三种用法](#三种用法)）。
+每个场景提供三项信息，不含可直接执行的完整命令块：
 
-## Quick start
+1. 需要创建的对象，例如 VLAN、区域、邻居、地址池。
+2. 配置顺序。VRP 对引用顺序敏感，这一项最容易出错。
+3. 用于确认结果的 `display` 命令。
 
-```bash
-# 1. 启动拓扑里的所有设备（自动标定工具栏 → 点击开启 → 最小化 → 逐台等就绪）
-ensp up lab.topo
+不提供命令模板，是因为照抄命令块会带来本项目要解决的若干失败情形。反掩码写成子网掩码、在系统视图中重复执行 `system-view`、给只有三个端口的 AR2220 配置 `GE0/0/3`，这些操作都不会报错，只会静默失效。给出骨架与验证命令，由使用者补全少量具体命令，通常更快也更准确。
 
-# 2. 下发配置（目录里每个 <设备名>.cfg 对应一台设备）
-ensp apply ./configs --topology lab.topo
+## 安装
 
-# 3. 看现在哪些设备在跑、哪些控制台能应答
-ensp status --topology lab.topo
+### 作为 DSH 插件
 
-# 4. 换了 eNSP 版本或改了显示缩放后，重新标定按钮坐标
-ensp probe
+```console
+dsh plugin --profile desktop add dsh-ensp
 ```
 
-`ensp up` 的典型输出：
+也可以在 DSH 插件市场中搜索 `dsh-ensp`。
 
-```
-topology lab.topo
-  4 devices, 3 links (AR2220×2, S5700×1, PC×1)
-window hwnd=132456 (launched)
-starting devices (per-device timeout 240s)
-  toolbar anchors measured {"x":992,"y":84,"w":16,"h":16}
-  ✓ AR1          console 2001 → <AR1> 34.2s
-  ✓ AR2          console 2002 → <AR2> 41.7s
-  ✓ LSW1         console 2003 → <LSW1> 48.1s
-  window minimised — desktop handed back
-all devices ready (3 new console ports)
+### 作为 CLI 或库
+
+```console
+npm install -g dsh-ensp
+ensp status
 ```
 
-### 配置目录约定
-
-`ensp apply` 读取目录里所有 `.cfg` / `.txt` 文件，**文件名去掉扩展名就是设备名**，必须与 `.topo` 里的设备名一致：
-
-```
-configs/
-├── AR1.cfg
-├── AR2.cfg
-└── LSW1.cfg
-```
-
-```text
-! AR1.cfg —— 注释用 ! 或 #，空行忽略
-sysname R1-TEST
-interface GigabitEthernet0/0/0
- ip address 10.0.0.1 255.255.255.0
- quit
-```
-
-### 命令一览
-
-| 命令 | 作用 |
-|---|---|
-| `ensp up <topo>` | 打开拓扑并启动全部设备，逐台验证就绪 |
-| `ensp up <topo> --stop` / `ensp stop` | 停止全部设备（红色方块） |
-| `ensp apply <dir> --topology <topo>` | 逐台下发配置；`--save` 下发后执行 `save`，`--device NAME` 只处理一台 |
-| `ensp status [--topology <topo>]` | 显示 eNSP 进程 / 窗口 / 当前锚点，可选逐台检查控制台 |
-| `ensp probe [--json]` | 只测量不点击，报告找到的绿色/红色按钮簇与解析结果 |
-
-其他参数：`--keep-window`（点击后不最小化）、`--timeout MS`（单台就绪上限，默认 240000）。
-
-退出码：`0` 成功，`1` 失败（有设备没就绪 / 配置出错），`2` 用法错误。
-
-## 三种用法
-
-### 1. CLI
-
-见上文 [Quick start](#quick-start)。适合手工跑实验、写 shell 脚本，或放进任何能在 Windows 上执行命令的流水线。
-
-### 2. MCP server
-
-包内自带一个零依赖的 MCP server（stdio + 换行分隔的 JSON-RPC 2.0，不依赖官方 SDK），把核心能力暴露成工具。
+### 作为 MCP Server
 
 ```json
 {
@@ -128,133 +157,118 @@ interface GigabitEthernet0/0/0
 }
 ```
 
-> 全局安装会额外提供 `dsh-ensp-mcp` 命令，等价写法是 `"command": "dsh-ensp-mcp"` 且不需要 `args`。
-> 客户端配置位置：Claude Desktop 是 `claude_desktop_config.json`，Cursor 是 `~/.cursor/mcp.json`。
+共暴露 12 个工具：`ensp_status`、`ensp_build_topology`、`ensp_open`、`ensp_start`、`ensp_stop`、`ensp_apply`、`ensp_apply_dir`、`ensp_query`、`ensp_probe`、`ensp_scenarios`、`ensp_scenario`、`ensp_preset_config`。
 
-暴露的工具：
+## 环境要求
 
-| 工具 | 作用 |
+| 项 | 要求 |
 |---|---|
-| `ensp_status` | eNSP 进程、窗口、当前锚点，以及各设备控制台是否应答 |
-| `ensp_open` | 启动 eNSP 并打开指定拓扑，返回 pid 与窗口句柄 |
-| `ensp_start` | 启动全部设备（自动标定 → 点击 → 最小化 → 逐台等就绪） |
-| `ensp_stop` | 停止全部设备 |
-| `ensp_apply` | 向单台设备下发配置文本 |
-| `ensp_apply_dir` | 按 `<设备名>.cfg` 约定批量下发整个目录 |
-| `ensp_query` | 在设备上执行只读命令并取回输出 |
-| `ensp_probe` | 只测量不点击，报告工具栏按钮锚点 |
-| `ensp_build_topology` | 从设备/链路描述生成 `.topo` 文件 |
-| `ensp_preset_config` | 生成常用实验预设（如双 PC 同 VLAN） |
+| 操作系统 | Windows。eNSP 仅有 Windows 版本 |
+| eNSP | 已安装且可正常运行，需要管理员权限。客户端清单声明了 `requireAdministrator` |
+| Node.js | 18 或更高版本 |
+| 权限 | 插件与 eNSP 必须处于相同权限级别。跨完整性级别时无法枚举到 eNSP 窗口 |
 
-工具返回结构化 JSON 而不是散文，便于模型自己判断下一步；工具内部的失败也以 `isError` 结果返回，而不是协议错误，
-这样模型能看到原因并自行重试。
+若 DSH 未以管理员身份运行，`ensp up` 会明确报告权限不足。
 
-### 3. DeepSeek Harness 插件
-
-> 接口已预留（`src/dsh/index.mjs` + `cordis.patch.yml`），当前版本 **尚未实现**，v0.2 提供。
-
-计划以 DSH 插件形态加载（`package.json` 已声明 `dsh.bundle.patch`），把同样的四个操作注册为 Agent 可调用的工具，让 Harness 直接编排「建拓扑 → 起设备 → 配 → 验证」的闭环。
-
-### 附：编程接口
-
-不经过 CLI，直接把核心模块嵌进自己的脚本：
-
-```js
-import { readTopology, summarise } from 'dsh-ensp/topology'
-import { pushConfig } from 'dsh-ensp/provision'
-
-const topo = await readTopology('lab.topo')
-console.log(summarise(topo))            // { devices, links, consoles, byModel }
-
-const r = await pushConfig({
-  device: 'AR1',
-  port: topo.devices.find((d) => d.name === 'AR1').comPort,
-  script: 'sysname R1-TEST\ninterface LoopBack0\n ip address 1.1.1.1 255.255.255.255\n',
-  save: false,
-})
-if (!r.ok) console.error(`第 ${r.failedAt.line} 行失败: ${r.failedAt.error}`)
-```
-
-可用的子路径导出：`dsh-ensp/core`、`/topology`、`/console`、`/launcher`、`/provision`。
-
-## How it works
-
-### 为什么必须驱动 GUI
-
-启动设备在 eNSP 里**没有 API**。以下路径都经过实测并被否定：
-
-| 尝试 | 结果 |
-|---|---|
-| 在 `.topo` 里写 `bootmode="1"` 期望自启 | **不成立**。改完后打开拓扑，`VBoxManage list runningvms` 仍为空，设备依旧停着 |
-| 用 `VBoxManage startvm` 直接拉起虚拟机的克隆 | **不可行**。VM 能跑起来，但没有控制台：`AR_Base` 的 `uart1="off"`，控制台并不走虚拟串口 |
-| 直连 eNSP 控制端口（65514 / 7301） | **不可用**。端口拒绝连接，协议未公开 |
-| 盲扫 `WM_COMMAND` 消息 id 触发按钮 | **禁止**。会把 eNSP 直接搞崩，工具栏没有稳定可枚举的 id |
-
-关键在于**控制台不是虚拟机的串口**：设备内的代理进程会反向连接到 eNSP 客户端分配的 `-consoleip/-consoleport` 对。也就是说，端口由客户端在启动设备时才分配，只有客户端能把设备「开起来」。所以唯一可靠的入口就是工具栏上那颗「开启设备」按钮——一次真实、像人手的鼠标点击。
-
-### 坐标标定：150% DPI 的坑
-
-这台机器是 **150% 缩放**，混用逻辑像素与物理像素会让每次点击整体偏移 1.5 倍，而且**看起来还挺像对的**：
-
-| 调用点 | 坐标系 | 该窗口的值 |
-|---|---|---|
-| 未声明 DPI 感知时的 `GetWindowRect` | 逻辑（被缩放） | 213,133 / 1280×800 |
-| `SetProcessDPIAware()` 之后的 `GetWindowRect` | 物理 | 320,200 / 1920×1200 |
-| `CopyFromScreen` | 永远是物理像素 | 1920×1200 的截图 |
-
-规则只有一条：**先 `SetProcessDPIAware()`，之后全程只用物理像素**。`GetWindowRect` / `SetCursorPos` / `CopyFromScreen` 三者必须在同一坐标系里，否则「测出来的 (1099,151)」看着合理，落点却在空白工具栏上。
-
-按钮位置不靠硬编码，而是按**颜色特征**在工具栏带里找连通块：绿色三角（判据 `g >= 90 && g-r >= 35 && g-b >= 25`）是开启设备，紧邻其右侧的红色方块是停止设备。坐标会随分辨率、eNSP 版本变化，颜色特征不会。实测物理相对坐标 `(992,84)` / `(1047,86)`，窗口相对。
-
-### 为什么不用固定等待
-
-同类设备的启动时间实测从 **34 s 到 48 s** 不等，模型、镜像、宿主机负载都会影响。固定 `sleep` 只有两种结局：要么短了把还在启动的设备判死，要么长了白等。
-
-所以每台设备**独立轮询自己的控制台 TCP 端口**：连上后发一个 `\r`，只有当 VRP 真的回出提示符（`<host>` / `[host]`）才认为就绪；到点还没回就如实报告「没就绪」，绝不假设它好了。整体超时只是一个宽裕的上限，不参与判定。
-
-### 配置下发：像人一样敲
-
-- **一条一条来**：不流水线发送，上一条的提示符回来才发下一条，错误永远不会跑到报告前面。
-- **遇错即停**：VRP 拒绝一行后，后续通常也会连锁失败，多刷的报错只会把真正的原因埋掉。第一处失败带着行号、命令原文和终端回显返回。
-- **视图读回来，不假设**：进入配置块前确认真的在系统视图；每块结束后重读提示符，如果某个 `quit` 多退了一层，会自动重新进入，而不是让余下整段脚本落错地方。
-- **主机名可能带连字符**：`R1-TEST` 这样的名字会让「有没有 `-`」这种判据完全失效，所以子视图识别是拿提示符里的主机名做比对，而不是看标点。
-- **只用 `\r` 换行**：`\r\n` 多出来的 LF 会被下一个 `[Y/N]` 确认吞掉，静默替用户答了默认值。
-
-## Known limitations
-
-- **仅 Windows + eNSP**。这不是实现取舍，而是 eNSP 本身只有 Windows 客户端，且唯一入口是 Win32 GUI。
-- **启动设备时会短暂占用前台约 1–2 秒**。eNSP 在窗口被遮挡或最小化时驱动会直接退出，因此必须先置前、点击、再最小化。这段时间请不要抢焦点。
-- **eNSP 升级或 DPI/分辨率变化后需要重新标定**：先让 eNSP 开着窗口，再跑 `ensp probe` 确认能找到绿色三角与红色方块。标定失败会退回默认锚点并在输出里标记为 `default`，此时点击可能落空。
-- **控制台端口来自 `.topo` 的 `com_port`**。如果拓扑是用别的工具生成或手工改过，端口可能为空或过期，`status` 会显示 `not answering`。
-- **需要管理员权限**。eNSP 以普通权限运行时，虚拟网卡创建会失败，表现为设备起不来而没有任何明显报错。
-- **MCP server 已可用，DSH 插件仍在实现中**（见[三种用法](#三种用法)）。
-
-## 开发
+## 快速开始
 
 ```bash
-git clone https://github.com/lizi600jin/dsh-ensp.git
-cd dsh-ensp
-npm test        # node --test
+# 1. 查看场景方向，并生成一个两台 PC 加一台交换机的实验
+ensp preset vlan-access
+node -e "import('dsh-ensp').then(async m => {
+  await m.writeTopology('lab.topo', m.twoPcLab())
+})"
+
+# 2. 打开并启动
+ensp up lab.topo
+
+# 3. 查看设备状态
+ensp status --topology lab.topo
+
+# 4. 下发配置
+ensp apply ./configs --topology lab.topo --save
 ```
 
-源码结构：
+## 实现说明
 
+以下问题在开发过程中实际出现过，记录于此以便后续维护。
+
+### DPI 缩放会破坏坐标一致性
+
+在 150% 缩放下，同一个窗口存在两套坐标：
+
+| 调用方式 | 坐标系 | 同一窗口的取值 |
+|---|---|---|
+| 未声明 DPI 感知的 `GetWindowRect` | 逻辑坐标（已缩放） | 213,133，尺寸 1280×800 |
+| 调用 `SetProcessDPIAware()` 之后 | 物理坐标 | 320,200，尺寸 1920×1200 |
+| `CopyFromScreen` | 始终为物理像素 | 图像尺寸 1920×1200 |
+
+混用会导致每次点击偏移 1.5 倍，表现为“点击无反应”。本项目全程使用物理坐标，且 `SetProcessDPIAware()` 必须在所有测量之前调用。
+
+### `<interface>` 分组必须与 eNSP 一致
+
+AR2220 的接口需要声明为两组：
+
+```xml
+<interface sztype="Ethernet" interfacename="GE" count="1" />   <!-- GE0/0/0 -->
+<interface sztype="Ethernet" interfacename="GE" count="2" />   <!-- GE0/0/1~2 -->
 ```
-src/
-├── cli/ensp.mjs        # 命令行入口：up / apply / status / probe / stop
-├── mcp/server.mjs      # 零依赖 MCP server：stdio + JSON-RPC 2.0
-└── core/
-    ├── build.mjs       # 从描述生成拓扑：模型接口表、自动布局、锚点偏移
-    ├── topology.mjs    # .topo 读写、设备与链路解析、接口索引映射
-    ├── launcher.mjs    # 进程/窗口定位、DPI 感知、工具栏点击、就绪轮询
-    ├── calibrate.mjs   # 按颜色特征标定工具栏锚点
-    ├── console.mjs     # VRP 控制台会话：提示符驱动的 exec / 视图判定
-    └── provision.mjs   # 配置批处理：逐条下发、遇错即停、行号定位
-docs/UI-ANCHORS.md      # 实测界面锚点记录与复测方法
-```
 
-修改坐标相关代码前请先读 [`docs/UI-ANCHORS.md`](docs/UI-ANCHORS.md)：里面记录了每个「看起来能跑其实在骗人」的坑。
+若合并为一个 `count="3"`，eNSP 打开后画布为空，且不产生任何错误提示。
 
-## License
+### PC 的接口名在文件与命令行中不一致
 
-[MIT](LICENSE)
+拓扑文件中写作 `interfacename="GE"`，命令行中对应 `Ethernet0/0/1`。
+
+### 正则单词边界对 `GigabitEthernet0` 不成立
+
+`GigabitEthernet` 与紧随的 `0` 均为单词字符，两者之间不存在单词边界，`\b` 断言因此失败且不报错，进而导致主机名解析错误和视图判断错误。
+
+### 视图切换存在竞态
+
+执行 `interface GigabitEthernet0/0/2` 后立即发送下一条命令时，设备可能尚未完成视图切换，该命令会被丢弃。需要等该命令本身回显之后，才能确认切换完成。
+
+## 致谢与许可
+
+### 开源协议
+
+本项目采用 [GPL-3.0-or-later](LICENSE)，即 GNU General Public License 第 3 版或更新版本。
+
+该协议与发布者的意愿对应如下：
+
+| 期望 | GPL-3.0 的对应条款 |
+|---|---|
+| 允许任何人修改 | 第 2 条，可自由修改与分发 |
+| 二次分发时注明原作者 | 第 5 条要求保留版权声明；本项目另依据第 7(b) 条增加署名要求 |
+| 二次修改的作品同样开源 | 第 5 条，衍生作品须以同一协议发布 |
+
+基于本项目修改并对外分发时，需要做到三点：
+
+1. 保留 `LICENSE` 中的版权声明。
+2. 在源码及随附文档中注明原项目名称 `dsh-ensp` 与仓库地址 <https://github.com/lizi600jin/dsh-ensp>。
+3. 使所分发的作品同样以 GPL-3.0-or-later 授权。
+
+仅自行使用而不对外分发时，上述要求不适用。
+
+未选用 MIT 或 Apache-2.0 的原因在于，这两者允许二次修改后闭源，与“二次修改也须开源”的意愿冲突。
+
+### 致谢
+
+- Huawei eNSP：仿真器本体。本项目的格式规则均来自对其自带 40 个样例拓扑的分析。
+- dsh-ops：本 README 的组织方式参考了该项目。
+- 在 issue 中反馈问题的使用者。
+
+## 免责声明
+
+本项目是一个自动化外壳，不包含 eNSP，也不包含任何华为软件或镜像。使用前请自行安装，并遵守华为的软件许可。
+
+自动化操作图形界面存在固有风险，例如窗口被遮挡、eNSP 版本升级、系统缩放变化。插件在检测到异常时会明确报错，但仍建议先在非关键环境中验证。
+
+## 相关文档
+
+| 文档 | 内容 |
+|---|---|
+| [`docs/ENSP-FORMAT.md`](docs/ENSP-FORMAT.md) | `.topo` 格式的完整规则，基于 40 个样例统计得出 |
+| [`docs/UI-ANCHORS.md`](docs/UI-ANCHORS.md) | 界面坐标、DPI 处理与启动流程 |
+| [`docs/SCENARIOS.md`](docs/SCENARIOS.md) | 23 个场景预设的详细说明 |
+| [`scripts/survey-topologies.mjs`](scripts/survey-topologies.mjs) | 重新统计样例格式，供 eNSP 升级后核对 |

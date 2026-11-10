@@ -13,15 +13,18 @@
     "mcp"
   ],
   "type": "module",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "main": "src/core/index.mjs",
   "exports": {
     ".": "./src/core/index.mjs",
     "./core": "./src/core/index.mjs",
     "./topology": "./src/core/topology.mjs",
+    "./build": "./src/core/build.mjs",
     "./console": "./src/core/console.mjs",
     "./launcher": "./src/core/launcher.mjs",
     "./provision": "./src/core/provision.mjs",
+    "./presets": "./src/core/presets.mjs",
+    "./calibrate": "./src/core/calibrate.mjs",
     "./mcp": "./src/mcp/server.mjs",
     "./dsh": "./src/dsh/index.mjs"
   },
@@ -32,9 +35,10 @@
   "files": [
     "src",
     "docs",
+    "scripts",
+    "cordis.patch.yml",
     "README.md",
-    "LICENSE",
-    "cordis.patch.yml"
+    "LICENSE"
   ],
   "scripts": {
     "test": "node --test",
@@ -59,5 +63,16 @@
     "@deepseek-ai/dsh-tools": {
       "optional": true
     }
+  },
+  "author": {
+    "name": "lizi600jin"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lizi600jin/dsh-ensp.git"
+  },
+  "homepage": "https://github.com/lizi600jin/dsh-ensp#readme",
+  "bugs": {
+    "url": "https://github.com/lizi600jin/dsh-ensp/issues"
   }
 }
