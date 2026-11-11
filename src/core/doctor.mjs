@@ -109,20 +109,32 @@ export function probeInputInjection({ timeoutMs = 30000 } = {}) {
   }
 }
 
-/** Free physical memory in MB, or null when it cannot be read. */
+/**
+ * Free physical memory in MB, or null when it cannot be read.
+ *
+ * On Windows Win32_OperatingSystem is the accurate number, but it needs
+ * PowerShell. Everything else (and any Windows box where PowerShell is not on
+ * PATH) falls back to os.freemem(), so the check still says something useful
+ * instead of giving up on the platform it happens to run on.
+ */
 export function freeMemoryMb() {
-  const r = spawnSync(
-    'powershell',
-    [
-      '-NoProfile',
-      '-Command',
-      "Get-CimInstance Win32_OperatingSystem | ForEach-Object { [int]($_.FreePhysicalMemory / 1024) }",
-    ],
-    { encoding: 'utf8', windowsHide: true, timeout: 20000 },
-  )
-  if (r.status !== 0) return null
-  const n = Number((r.stdout || '').trim())
-  return Number.isFinite(n) && n > 0 ? n : null
+  if (process.platform === 'win32') {
+    const r = spawnSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        "Get-CimInstance Win32_OperatingSystem | ForEach-Object { [int]($_.FreePhysicalMemory / 1024) }",
+      ],
+      { encoding: 'utf8', windowsHide: true, timeout: 20000 },
+    )
+    if (r.status === 0) {
+      const n = Number((r.stdout || '').trim())
+      if (Number.isFinite(n) && n > 0) return n
+    }
+  }
+  const fallback = Math.floor(os.freemem() / (1024 * 1024))
+  return Number.isFinite(fallback) && fallback > 0 ? fallback : null
 }
 
 /** Ports in eNSP's console range that are already listening. */
@@ -244,7 +256,14 @@ export function doctor(options = {}) {
   // 6. Memory headroom: each AR_Base needs 256 MB, WLAN images 530-650 MB
   const free = freeMemoryMb()
   if (free === null) {
-    checks.push(check('memory', 'warn', 'could not read free physical memory'))
+    checks.push(
+      check(
+        'memory',
+        'warn',
+        'could not read free physical memory',
+        'Check free memory yourself (Task Manager on Windows) and keep at least 1 GB spare; a device needs ~256 MB to boot.',
+      ),
+    )
   } else {
     const okMem = free >= MIN_FREE_MEMORY_MB
     checks.push(
