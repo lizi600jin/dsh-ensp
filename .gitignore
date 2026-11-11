@@ -5,3 +5,4 @@ _scratch/
 .env
 coverage/
 *.tsbuildinfo
+.npmrc

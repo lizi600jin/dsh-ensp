@@ -43,8 +43,25 @@ const MODEL_SPECS = {
   Cloud: { groups: [['Ethernet', 'Ethernet', 3, 0]] },
 }
 
-/** Icon bounding box offsets used for cable anchors. */
-const ICON = { w: 86, h: 86, left: -16.2, right: 70.2 }
+/**
+ * Icon bounding box, measured from every cable anchor in eNSP's own samples.
+ *
+ * The box is **not** centred on (cx, cy): it runs from `cx - 16.2` to
+ * `cx + 70.2` horizontally, so its centre is `cx + 27`, not `cx + 43`. Using
+ * `height / 2` puts the anchor outside the icon and eNSP then rejects the whole
+ * `<lines>` block, which shows up as an empty canvas with no error message.
+ *
+ * Frequencies across the bundled samples: (+70.2,+27.0) x35, (-16.2,+27.0) x35,
+ * (+27.0,+70.2) x29, (+27.0,-16.2) x27.
+ */
+const ICON = {
+  left: -16.2,
+  right: 70.2,
+  top: -16.2,
+  bottom: 70.2,
+  centerX: 27.0,
+  centerY: 27.0,
+}
 
 /**
  * Interfaces exposed by each model eNSP can run, in declaration order.
@@ -255,11 +272,12 @@ export function serialiseTopology(topo) {
     const dst = byId.get(l.dstId)
     if (!src || !dst) throw new Error(`link references unknown device: ${l.srcId} -> ${l.dstId}`)
 
-    // Anchor on the facing sides: right edge of the source, left edge of the target.
+    // Anchor on the facing sides: right edge of the source, left edge of the target,
+    // both at the icon's true vertical centre.
     const sx = src.x + ICON.right
-    const sy = src.y + ICON.h / 2
+    const sy = src.y + ICON.centerY
     const tx = dst.x + ICON.left
-    const ty = dst.y + ICON.h / 2
+    const ty = dst.y + ICON.centerY
 
     return (
       `        <line srcDeviceID="${src.id}" destDeviceID="${dst.id}">\n` +

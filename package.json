@@ -1,7 +1,7 @@
 {
   "name": "dsh-ensp",
-  "version": "0.1.0",
-  "description": "Automate Huawei eNSP labs end to end: build the topology, boot the devices, and push configuration line by line with real per-command verification — from the CLI, an MCP client, or the DeepSeek Harness.",
+  "version": "0.1.6",
+  "description": "Automate Huawei eNSP labs: generate .topo files, start and stop devices, and push configuration one command at a time with per-command error reporting.",
   "keywords": [
     "dsh",
     "dsh-plugin",
@@ -10,13 +10,15 @@
     "huawei",
     "vrp",
     "network-simulation",
-    "mcp"
+    "mcp",
+    "automation"
   ],
   "type": "module",
   "license": "GPL-3.0-or-later",
-  "main": "src/core/index.mjs",
+  "main": "./src/dsh/index.mjs",
   "exports": {
-    ".": "./src/core/index.mjs",
+    ".": "./src/dsh/index.mjs",
+    "./dsh": "./src/dsh/index.mjs",
     "./core": "./src/core/index.mjs",
     "./topology": "./src/core/topology.mjs",
     "./build": "./src/core/build.mjs",
@@ -25,8 +27,7 @@
     "./provision": "./src/core/provision.mjs",
     "./presets": "./src/core/presets.mjs",
     "./calibrate": "./src/core/calibrate.mjs",
-    "./mcp": "./src/mcp/server.mjs",
-    "./dsh": "./src/dsh/index.mjs"
+    "./mcp": "./src/mcp/server.mjs"
   },
   "bin": {
     "ensp": "src/cli/ensp.mjs",
@@ -37,6 +38,7 @@
     "docs",
     "scripts",
     "cordis.patch.yml",
+    "screenshots.json",
     "README.md",
     "LICENSE"
   ],
@@ -50,18 +52,6 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    }
-  },
-  "peerDependencies": {
-    "@deepseek-ai/dsh-client-ui": "*",
-    "@deepseek-ai/dsh-tools": "*"
-  },
-  "peerDependenciesMeta": {
-    "@deepseek-ai/dsh-client-ui": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-tools": {
-      "optional": true
     }
   },
   "author": {

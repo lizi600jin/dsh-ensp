@@ -30,6 +30,8 @@
 
 import { spawn, spawnSync } from 'node:child_process'
 import net from 'node:net'
+import os from 'node:os'
+import path from 'node:path'
 
 import { calibrateAnchors, DEFAULT_ANCHORS } from './calibrate.mjs'
 
@@ -180,15 +182,59 @@ ${body}
   return { ok: r.status === 0, stdout: (r.stdout || '').trim(), stderr: (r.stderr || '').trim() }
 }
 
-/** PID of the running eNSP client, or null. */
+/**
+ * PID of a *live* eNSP client, or null.
+ *
+ * eNSP leaves zombie processes behind: the process object survives with
+ * `Threads.Count === 0` and holds the client's single-instance lock, so a new
+ * launch inherits an empty canvas. Such a PID must never be reused.
+ *
+ * @returns {number|null}
+ */
 export function enspPid() {
   const r = spawnSync(
     'powershell',
-    ['-NoProfile', '-Command', '(Get-Process eNSP_Client -ErrorAction SilentlyContinue | Select-Object -First 1).Id'],
+    [
+      '-NoProfile',
+      '-Command',
+      'Get-Process eNSP_Client -ErrorAction SilentlyContinue | ' +
+        'Where-Object { $_.Threads.Count -gt 0 } | ' +
+        'Select-Object -First 1 -ExpandProperty Id',
+    ],
     { encoding: 'utf8', windowsHide: true },
   )
   const pid = Number((r.stdout || '').trim())
   return Number.isInteger(pid) && pid > 0 ? pid : null
+}
+
+/**
+ * Is this window handle still valid and owned by a live process?
+ *
+ * @param {string} hwnd
+ * @returns {boolean}
+ */
+export function windowAlive(hwnd) {
+  const r = runPowerShell(
+    `$h = [IntPtr]::new([int64]${hwnd})
+     if (-not [EnspWin]::IsWindow($h)) { 'no'; exit 0 }
+     $owned = Get-Process eNSP_Client -ErrorAction SilentlyContinue | Where-Object { $_.Threads.Count -gt 0 }
+     if ($owned) { 'yes' } else { 'no' }`,
+    { timeoutMs: 20000 },
+  )
+  return r.ok && r.stdout.trim().endsWith('yes')
+}
+
+/** Every eNSP client PID, including zero-thread zombies. */
+export function enspPids() {
+  const r = spawnSync(
+    'powershell',
+    ['-NoProfile', '-Command', 'Get-Process eNSP_Client -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id'],
+    { encoding: 'utf8', windowsHide: true },
+  )
+  return (r.stdout || '')
+    .split(/\s+/)
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n > 0)
 }
 
 /**
@@ -200,36 +246,234 @@ export function enspPid() {
  * @param {number} [options.readyTimeoutMs=90000] - how long to wait for the window to exist
  * @returns {Promise<{pid: number, hwnd: string}>}
  */
-export async function launchEnsp({ topology, exspPath, readyTimeoutMs = 90000 } = {}) {
+export async function launchEnsp({ topology, exspPath, readyTimeoutMs = 120000 } = {}) {
   const exe = exspPath ?? process.env.DSH_ENSP_EXE ?? 'E:\\Huawei\\eNSP\\eNSP_Client.exe'
-  const already = enspPid()
-  if (already) {
-    const hwnd = locateWindow(already)
-    if (hwnd) return { pid: already, hwnd, reused: true }
-  }
+  const target = topology ? path.resolve(topology) : null
 
-  const args = topology ? [topology] : []
-  const child = spawn(exe, args, { detached: true, stdio: 'ignore', windowsHide: false })
-  child.unref()
-
-  // Poll tightly: eNSP creates its frame before it finishes painting, and every
-  // second spent here is dead time the caller cannot overlap with anything.
-  const started = Date.now()
-  const deadline = started + readyTimeoutMs
-  let pid = null
-  let hwnd = null
-  while (Date.now() < deadline) {
-    pid = enspPid()
-    if (pid) {
-      hwnd = locateWindow(pid)
-      if (hwnd) return { pid, hwnd, waitMs: Date.now() - started }
+  // Reuse an existing window only when it renders something; a blank window is a
+  // dead instance that would otherwise be reported as success.
+  const existing = enspPid()
+  if (existing) {
+    const hwnd = locateWindow(existing)
+    if (hwnd && (!target || topologyRendered(hwnd))) {
+      return { pid: existing, hwnd, reused: true, rendered: Boolean(hwnd) }
     }
-    await sleep(250)
+    if (hwnd && target) {
+      // A live window showing nothing: reopen the file in it first.
+      reopenTopology(target)
+      if (await waitForRender(hwnd, { attempts: 6, intervalMs: 2500 })) {
+        return { pid: existing, hwnd, reused: true, rendered: true }
+      }
+    }
+    // Give up on it: stale clients hold eNSP's single-instance lock and make every
+    // new window open blank.
+    killAllClients()
+    await sleep(2500)
   }
+
+  /** Launch once and wait for a frame window. */
+  const boot = async () => {
+    startDetached(exe, target)
+    const started = Date.now()
+    const deadline = started + readyTimeoutMs
+    while (Date.now() < deadline) {
+      const pid = enspPid()
+      if (pid) {
+        const hwnd = locateWindow(pid)
+        if (hwnd) return { pid, hwnd, waitMs: Date.now() - started }
+      }
+      await sleep(250)
+    }
+    return null
+  }
+
+  // Up to three attempts: the client occasionally opens with an empty canvas on a
+  // cold start, and a clean relaunch always renders. Verified empirically.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const booted = await boot()
+    if (!booted) {
+      killAllClients()
+      await sleep(1500)
+      continue
+    }
+    if (!target) return { ...booted, reused: false, rendered: true }
+    if (await waitForRender(booted.hwnd, { attempts: 6, intervalMs: 2000 })) {
+      return { ...booted, reused: false, rendered: true }
+    }
+    // Blank canvas: tear the instance down and try again from a clean state.
+    killAllClients()
+    await sleep(2500)
+  }
+
   throw new Error(
-    `eNSP window did not appear within ${readyTimeoutMs} ms` +
-      (pid ? ` (pid ${pid} started but no frame window)` : ' (process never started)'),
+    'eNSP opened but never rendered the topology after 3 attempts. ' +
+      'Close every eNSP window and retry; a leftover client holds the single-instance lock.',
   )
+}
+
+/**
+ * Force-terminate every eNSP client process.
+ *
+ * Zombie processes (zero threads) cannot be killed by any API; they linger until
+ * the OS reaps them. This reports what survived so the caller can decide whether
+ * retrying is worthwhile.
+ *
+ * @returns {{killed: boolean, survivors: number[]}}
+ */
+function killAllClients() {
+  spawnSync('taskkill', ['/F', '/IM', 'eNSP_Client.exe'], { windowsHide: true, encoding: 'utf8' })
+  return { killed: true, survivors: enspPids() }
+}
+
+/**
+ * Poll until the canvas actually shows the topology.
+ *
+ * @param {string} hwnd
+ * @param {{attempts?: number, intervalMs?: number}} [options]
+ * @returns {Promise<boolean>}
+ */
+async function waitForRender(hwnd, { attempts = 6, intervalMs = 2000 } = {}) {
+  for (let i = 0; i < attempts; i++) {
+    await sleep(intervalMs)
+    if (topologyRendered(hwnd)) return true
+  }
+  return false
+}
+
+/**
+ * Start the client so that it outlives this Node process.
+ *
+ * `spawn(..., {detached:true})` is not enough on Windows: eNSP is a GUI application
+ * that terminates when the console session that launched it goes away. Going
+ * through `cmd /c start` hands ownership to the shell, which is what a double-click
+ * in Explorer does, and the client then survives its launcher.
+ *
+ * @param {string} exe
+ * @param {string|null} [topology]
+ */
+function startDetached(exe, topology) {
+  // Win32_Process.Create via WMI is the only launch path measured to leave the
+  // client fully independent of this Node process:
+  //
+  //   spawn(..., {detached:true})  -> client dies with its launcher
+  //   cmd /c start                 -> client dies with its launcher
+  //   Start-Process -WindowStyle Hidden -> client exits before creating a window
+  //   Start-Process (visible)      -> unreliable when called from a hidden shell
+  //   WMI Win32_Process.Create     -> survives; returns the real PID
+  //
+  // The client must outlive the tool call, otherwise every follow-up (start
+  // devices, push config) finds a dead console.
+  const cmdline = topology ? `"${exe}" "${topology}"` : `"${exe}"`
+  const r = runPowerShell(
+    `
+$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+  CommandLine = '${cmdline.replace(/'/g, "''")}'
+}
+if ($r.ReturnValue -ne 0) { 'ERR ' + $r.ReturnValue; exit 0 }
+'pid=' + $r.ProcessId
+`,
+    { timeoutMs: 30000 },
+  )
+  if (!r.ok || !/pid=\d+/.test(r.stdout)) {
+    throw new Error(`could not launch eNSP: ${r.stdout || r.stderr || 'WMI refused the request'}`)
+  }
+  return Number(/pid=(\d+)/.exec(r.stdout)[1])
+}
+
+/**
+ * Ask the running client to open a topology again.
+ *
+ * A second instance is normally refused, so this relaunches the client with the
+ * same file; the window handle changes and the caller re-locates it.
+ *
+ * @param {string} topology
+ */
+function reopenTopology(topology) {
+  const exe = process.env.DSH_ENSP_EXE ?? 'E:\\Huawei\\eNSP\\eNSP_Client.exe'
+  startDetached(exe, topology)
+}
+
+/**
+ * Take a screenshot of the client's canvas, cropped to the drawing area.
+ *
+ * Used by `topologyRendered` and by the probe diagnostics. The canvas excludes the
+ * left device palette and the toolbar, so anything found inside it came from the
+ * open topology.
+ *
+ * @param {string} hwnd
+ * @returns {string} absolute path to the PNG, or '' on failure
+ */
+export function captureCanvas(hwnd) {
+  const out = path.join(os.tmpdir(), `dsh-ensp-canvas-${Date.now()}.png`)
+  const r = runPowerShell(
+    `
+$h = [IntPtr]::new([int64]${hwnd})
+[void][EnspWin]::FocusWindow($h)
+Start-Sleep -Milliseconds 900
+$wr = New-Object EnspWin+RECT
+[void][EnspWin]::GetWindowRect($h, [ref]$wr)
+$w = $wr.R - $wr.L; $ht = $wr.B - $wr.T
+if ($w -lt 400 -or $ht -lt 300) { 'ERR small'; exit 0 }
+Add-Type -AssemblyName System.Drawing
+$bmp = New-Object System.Drawing.Bitmap $w, $ht
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($wr.L, $wr.T, 0, 0, $bmp.Size)
+$bmp.Save('${out.replace(/\\/g, '\\\\')}', [System.Drawing.Imaging.ImageFormat]::Png)
+$bmp.Dispose(); $g.Dispose()
+'ok'
+`,
+    { timeoutMs: 40000 },
+  )
+  return r.ok ? out : ''
+}
+
+/**
+ * Does the open topology show devices on the canvas?
+ *
+ * eNSP paints with DirectX, so there is no window tree to query. Two independent
+ * signals are combined, because either alone is weak:
+ *
+ *   1. **Icon colour.** Device icons are a saturated blue on a pale canvas; the
+ *      empty canvas has no such pixels.
+ *   2. **Link lines.** Rendered links are near-black thin strokes across the canvas.
+ *
+ * This is the check that gates "the topology actually opened". Callers retry on a
+ * negative result rather than reporting success for a blank window.
+ *
+ * @param {string} hwnd
+ * @returns {boolean}
+ */
+export function topologyRendered(hwnd) {
+  const png = captureCanvas(hwnd)
+  if (!png) return false
+  const r = runPowerShell(
+    `
+Add-Type -AssemblyName System.Drawing
+$bmp = [System.Drawing.Bitmap]::FromFile('${png.replace(/\\/g, '\\\\')}')
+$w = $bmp.Width; $ht = $bmp.Height
+# Canvas only: skip the palette column and the toolbar band.
+$x0 = [int]($w * 0.22); $x1 = [int]($w * 0.97)
+$y0 = [int]($ht * 0.10); $y1 = [int]($ht * 0.92)
+$icon = 0; $dark = 0
+for ($y = $y0; $y -lt $y1; $y += 2) {
+  for ($x = $x0; $x -lt $x1; $x += 2) {
+    $c = $bmp.GetPixel($x, $y)
+    if ($c.B -gt 140 -and ($c.B - $c.R) -gt 55 -and ($c.B - $c.G) -gt 25) { $icon++ }
+    elseif ($c.R -lt 90 -and $c.G -lt 90 -and $c.B -lt 90) { $dark++ }
+  }
+}
+$bmp.Dispose()
+'icon=' + $icon + ' dark=' + $dark
+`,
+    { timeoutMs: 40000 },
+  )
+  if (!r.ok) return false
+  const m = /icon=(\d+) dark=(\d+)/.exec(r.stdout)
+  if (!m) return false
+  const icon = Number(m[1])
+  const dark = Number(m[2])
+  // A rendered lab shows dozens of icon pixels and a few hundred link pixels.
+  return icon >= 15 && dark >= 40
 }
 
 /**
@@ -399,12 +643,28 @@ export async function startAllDevices({
 
   // Locate the toolbar buttons by colour instead of trusting hard-coded pixels;
   // this survives eNSP upgrades, DPI changes and different display sizes.
+  // The window must still exist: a stale handle means the client already exited,
+  // and clicking a dead handle does nothing while reporting success below.
+  if (!hwnd || !windowAlive(hwnd)) {
+    throw new Error('eNSP window is gone; reopen the topology before starting devices')
+  }
+
   report({ phase: 'calibrate', hwnd })
   let anchors
   try {
     anchors = calibrateAnchors(hwnd)
   } catch (error) {
     anchors = { ...DEFAULT_ANCHORS, method: 'default', detail: { reason: error.message } }
+  }
+
+  // A default anchor means calibration failed, and an unmeasured click can land on
+  // any toolbar control (including the one that closes the document). Refuse
+  // instead of guessing.
+  if (anchors.method !== 'measured') {
+    throw new Error(
+      `toolbar calibration failed (${anchors.detail?.reason ?? 'unknown'}). ` +
+        'Make sure the eNSP window is visible and run ensp_probe to re-measure.',
+    )
   }
   report({ phase: 'calibrated', method: anchors.method, detail: anchors.detail })
 

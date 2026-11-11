@@ -49,7 +49,15 @@ export {
   DEFAULT_ANCHORS,
 } from './calibrate.mjs'
 
-export { pushConfig, pushConfigMany, queryDevice, parseScript } from './provision.mjs'
+export {
+  pushConfig,
+  pushConfigMany,
+  queryDevice,
+  parseScript,
+  waitForOutput,
+  waitForOspfFull,
+  waitForOspfRoute,
+} from './provision.mjs'
 
 export {
   SCENARIOS,

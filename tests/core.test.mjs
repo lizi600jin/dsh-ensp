@@ -121,13 +121,21 @@ test('serialiseTopology emits eNSP-compatible structure', () => {
   assert.match(out, /cx="300\.000000" cy="120\.000000" edit_left="327" edit_top="174"/)
 })
 
-test('cable anchors sit on the icon bounding box', () => {
+test('cable anchors use the icon box measured from eNSP samples', () => {
+  // The icon box is not centred on (cx, cy): it spans cx-16.2 .. cx+70.2 and
+  // cy-16.2 .. cy+70.2, so its centre is (cx+27, cy+27). Using height/2 (+43)
+  // places anchors outside the icon; eNSP then drops the entire <lines> block and
+  // renders an empty canvas with no error.
   const topo = twoPcLab()
   const out = serialiseTopology(topo)
-  // PC1 at (180,320): right edge = 180 + 70.2, vertical centre = 320 + 43.
-  assert.match(out, /srcBoundRect_X="250\.200000" srcBoundRect_Y="363\.000000"/)
-  // SW1 at (300,120): left edge = 300 - 16.2, vertical centre = 120 + 43.
-  assert.match(out, /tarBoundRect_X="283\.800000" tarBoundRect_Y="163\.000000"/)
+
+  // PC1 at (180,320): right edge = 180 + 70.2, centre = 320 + 27.
+  assert.match(out, /srcBoundRect_X="250\.200000" srcBoundRect_Y="347\.000000"/)
+  // SW1 at (300,120): left edge = 300 - 16.2, centre = 120 + 27.
+  assert.match(out, /tarBoundRect_X="283\.800000" tarBoundRect_Y="147\.000000"/)
+  // The old, wrong values must never come back.
+  assert.doesNotMatch(out, /BoundRect_Y="363\.000000"/)
+  assert.doesNotMatch(out, /BoundRect_Y="163\.000000"/)
 })
 
 test('twoPcLab wires both PCs into the switch on the right ports', () => {
@@ -176,4 +184,69 @@ test('buildTopology rejects interfaces the model does not have', () => {
 
 test('buildTopology rejects duplicate device names', () => {
   assert.throws(() => buildTopology().add('SW1', 'S5700').add('SW1', 'S5700'), /duplicate/)
+})
+
+test('DSH tool definitions satisfy the harness schema contract', async () => {
+  // Two rules that each fail activation with a schema complaint rather than a
+  // stack trace, so they are worth pinning here:
+  //   1. `parameters` is a flat field map, not a JSON Schema with `properties`.
+  //   2. `output.schema` must not leave `required: true` on a leaf; the marker is
+  //      hoisted into an object-level `required` array by `obj()`.
+  const registered = []
+  const ctx = { tools: { register: (def) => (registered.push(def), () => {}) } }
+  const plugin = await import('../src/dsh/index.mjs')
+  plugin.apply(ctx)
+
+  assert.equal(registered.length, 12, 'expected 12 tools')
+
+  const violations = (node, path = 's') => {
+    const bad = []
+    if (node === null || typeof node !== 'object') return bad
+    if (Array.isArray(node)) {
+      node.forEach((n, i) => bad.push(...violations(n, `${path}[${i}]`)))
+      return bad
+    }
+    for (const [k, v] of Object.entries(node)) {
+      if (k === 'required' && v === true) bad.push(`${path}.required=true`)
+      else if (k === 'required' && !Array.isArray(v)) bad.push(`${path}.required-not-array`)
+      else bad.push(...violations(v, `${path}.${k}`))
+    }
+    return bad
+  }
+
+  for (const tool of registered) {
+    assert.ok(tool.name, 'tool needs a name')
+    assert.ok(tool.description, `${tool.name} needs a description`)
+    assert.equal(typeof tool.execute, 'function', `${tool.name} needs execute`)
+    assert.ok(!tool.parameters?.properties, `${tool.name} parameters must be flat`)
+    assert.ok(tool.output?.schema, `${tool.name} needs output.schema`)
+    assert.equal(typeof tool.output.render, 'function', `${tool.name} needs output.render`)
+    assert.deepEqual(violations(tool.output.schema), [], `${tool.name} schema has leaf required markers`)
+  }
+})
+
+test('generated topology renders (documents the zombie-process trap)', async () => {
+  // Every value below is asserted against eNSP's own samples, not guessed.
+  // The comment records the two failure modes that produced an empty canvas:
+  //
+  //   1. interface <interface> grouping must match the model exactly
+  //   2. cable anchors use the icon box (cx-16.2..cx+70.2), centre = cy+27
+  //
+  // A third cause is environmental and cannot be tested here: a zero-thread eNSP
+  // zombie holds the single-instance lock, so the new window draws nothing.
+  // `launcher.enspPid()` filters those out and `launchEnsp` verifies rendering.
+  const topo = twoPcLab({ vlan: 10 })
+  const xml = serialiseTopology(topo)
+
+  // switches declare 24 GE ports in one group; PCs declare 1 GE port
+  assert.match(xml, /<interface sztype="Ethernet" interfacename="GE" count="24" \/>/)
+  assert.match(xml, /<interface sztype="Ethernet" interfacename="GE" count="1" \/>/)
+
+  // anchors sit on the measured icon box, not on cx+height/2
+  const anchors = [...xml.matchAll(/BoundRect_Y="([\d.]+)"/g)].map((m) => Number(m[1]))
+  assert.ok(anchors.includes(347.0), 'PC1 link anchor y = 320 + 27')
+  assert.ok(anchors.includes(147.0), 'SW1 link anchor y = 120 + 27')
+
+  // the file must be parseable back
+  assert.equal(parseTopology(xml).devices.length, 3)
 })

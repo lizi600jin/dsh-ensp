@@ -280,3 +280,84 @@ export async function queryDevice({ port, command, timeoutMs = 25000 }) {
     session?.close()
   }
 }
+
+/**
+ * Poll a device until a predicate accepts its command output, or time runs out.
+ *
+ * Routing protocols converge asynchronously: right after `ospf 1` is committed a
+ * peering sits in ExStart/Exchange/Loading for a while, and a single query taken
+ * too early reads as "failed" when it is merely "not finished". Waiting a fixed
+ * number of seconds either wastes time or is still too short on a slow machine,
+ * so every convergence assertion in this package goes through this helper.
+ *
+ * @param {{
+ *   port: number,
+ *   command: string,
+ *   until: (output: string) => boolean,
+ *   timeoutMs?: number,
+ *   intervalMs?: number,
+ *   probeTimeoutMs?: number,
+ * }} options
+ * @returns {Promise<{ok: boolean, converged: boolean, output: string, attempts: number, waitedMs: number}>}
+ */
+export async function waitForOutput({
+  port,
+  command,
+  until,
+  timeoutMs = 120000,
+  intervalMs = 3000,
+  probeTimeoutMs = 20000,
+}) {
+  const started = Date.now()
+  let attempts = 0
+  let output = ''
+  while (Date.now() - started < timeoutMs) {
+    attempts += 1
+    const r = await queryDevice({ port, command, timeoutMs: probeTimeoutMs })
+    if (r.ok) output = r.output
+    if (r.ok && until(r.output)) {
+      return { ok: true, converged: true, output, attempts, waitedMs: Date.now() - started }
+    }
+    await sleep(intervalMs)
+  }
+  return {
+    ok: false,
+    converged: false,
+    output,
+    attempts,
+    waitedMs: Date.now() - started,
+  }
+}
+
+/**
+ * Wait until an OSPF adjacency reaches Full on `port`, optionally naming the peer.
+ *
+ * @param {{port: number, neighbourId?: string, timeoutMs?: number}} options
+ */
+export async function waitForOspfFull({ port, neighbourId, timeoutMs = 120000 }) {
+  const r = await waitForOutput({
+    port,
+    command: 'display ospf peer brief',
+    until: (out) =>
+      out
+        .split('\n')
+        .filter((l) => /\bFull\b/.test(l))
+        .some((l) => !neighbourId || l.includes(neighbourId)),
+    timeoutMs,
+  })
+  return { ...r, neighbourId: neighbourId || null }
+}
+
+/**
+ * Wait until a prefix shows up in the OSPF routing table on `port`.
+ *
+ * @param {{port: number, prefix: string, timeoutMs?: number}} options
+ */
+export async function waitForOspfRoute({ port, prefix, timeoutMs = 120000 }) {
+  return waitForOutput({
+    port,
+    command: 'display ip routing-table protocol ospf',
+    until: (out) => out.includes(prefix),
+    timeoutMs,
+  })
+}
