@@ -1,5 +1,10 @@
 name: Publish to npm
 
+# Publishes on a GitHub release, and can be run by hand from the Actions tab.
+#
+# The version guard matters because a release often ships after the maintainer
+# already published from their machine. Without it the job would fail on the
+# duplicate version and leave a red mark on a release that is actually fine.
 on:
   release:
     types: [published]
@@ -24,9 +29,36 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
-        run: npm ci || npm install
+        run: |
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Check whether this version is already on the registry
+        id: check
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "dsh-ensp@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::dsh-ensp@$VERSION is already published; nothing to do."
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Publish
+        if: steps.check.outputs.needed == 'true'
         run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Report missing token
+        if: steps.check.outputs.needed == 'true' && env.NODE_AUTH_TOKEN == ''
+        run: |
+          echo "::error::NPM_TOKEN secret is not set, so the publish step cannot authenticate."
+          echo "Add it under Settings -> Secrets and variables -> Actions, or publish locally."
+          exit 1
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
