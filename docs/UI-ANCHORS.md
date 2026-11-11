@@ -63,6 +63,58 @@
 | 窗口在后台也能点 | **不可**；遮挡/最小化状态下驱动会让进程退出。必须先置前、操作完再最小化 |
 | `FindWindowW('eNSP_Client')` 可定位 | **不可靠**；标题随拓扑变化，改拓扑后取不到 |
 
+## 遮挡是硬失败，不是可重试的小问题
+
+合成点击落在**拥有那个像素的窗口**上，不是落在我们以为的窗口上。当别的程序盖住 eNSP 时，
+鼠标事件全被那个程序接走，eNSP 一条都没收到；而每一步都会报成功，调用方于是去等一批从未启动的设备。
+这不是理论问题：一次实测里，全屏 VMware 窗口正压在 eNSP 上，`(992,84)` 这个点的属主是
+`vmware-vmx`（PID 9948），点击返回 `ok:true` 而 `VBoxManage list runningvms` 全程为空。
+
+所以插件在**点击前**先用 `WindowFromPoint` + `GetAncestor(GA_ROOT)` 查落点属主：
+
+- 属主 PID ≠ eNSP PID → 不点击，抛错并点名挡路进程（`eNSP is covered by vmware (unknown) at 1307,426 ...`）
+- `startAllDevices` 在标定之前还会用一张 5×4 的采样网格扫整个窗口；只要有任何一点被外人占住就拒绝开始，
+  因为标定是**拍照**，被遮挡时量出来的是别人的像素，锚点全错
+- 点击之后会再查一次属主（`STOLEN` 情形），防止点击瞬间被抢走
+
+### 为什么不能自动置顶
+
+这里有两层独立的拦截，缺一层都解释不通实测结果。
+
+**第一层：UIPI。** eNSP 的 exe 内嵌 manifest 写死 `<requestedExecutionLevel level="requireAdministrator">`，
+所以它总以 **High 完整性**运行；普通 shell 是 **Medium**。Windows 的 UIPI 禁止低完整性进程向高完整性
+窗口投递输入类消息，因此从 Medium 上下文：
+
+| 调用 | 结果 |
+|---|---|
+| `SendMessage(hwnd, WM_MOUSEMOVE=0x200)` | `ret=0 err=5`（ERROR_ACCESS_DENIED） |
+| `SendMessage(hwnd, WM_LBUTTONDOWN=0x201)` | `ret=0 err=5` |
+| `PostMessage(hwnd, WM_MOUSEMOVE)` | `ok=False err=5` |
+| `SendMessage(hwnd, WM_GETTEXT=0xD)` / `WM_NULL` | `err=0`（只读消息能过，输入消息被拦） |
+| `ShowWindow` / `BringWindowToTop` / `SetWindowPos` | `err=5` |
+| `GetCursorPos` / `SetCursorPos` | `err=203` |
+
+**第二层：前台锁。** 用 `Start-Process -Verb RunAs` 提到 High 之后（本机 UAC 是
+`ConsentPromptBehaviorAdmin=0`，提升不弹窗），UIPI 那层就放行了——`SendMessage` 的 errno 从 5 变成 183，
+`BringWindowToTop` 甚至返回 `True`。但前台窗口仍是别的进程，`SetForegroundWindow` 依然 `False`、
+`SetCursorPos` 依然 `False`。原因是 Windows 的前台锁：只有“当前拥有前台权限”的进程才能改前台，
+一个刚从后台起来的进程没有这个权限，`AttachThreadInput` 也拿不到（`attach=False err=5`）。
+
+已排除“不同窗口站/桌面”：`GetProcessWindowStation()` = `WinSta0`、`GetThreadDesktop()` = `Default`、
+`OpenInputDesktop(0,false,0x0001)` 返回的桌面名也是 `Default`；所有进程 `SessionId` 均为 1，
+`WTSGetActiveConsoleSessionId()` 也是 1。也排除了 Job 限制：
+`QueryInformationJobObject(JobObjectBasicUIRestrictions)` 返回 `flags=0x0`。
+
+另一条路也堵着：`PrintWindow` 从 Medium 上下文返回全白（`ok=False`），从 High 上下文**能**拍到真画布
+（这是唯一一处提权有实质收益的地方），但拍到画面不等于能把点击送进去。
+
+结论：**eNSP 窗口必须由用户自己保持在最上层，并且用户得在那个桌面上**。插件能做的是尽早、明确、
+可操作地报错，而不是点空了继续等。这也是 `ensp up` 要求“启动时短暂占用前台”的真实原因。
+
+顺带一条实测结论，用来排除“是不是该提权”：**提权解决不了这件事**。提到 High 只换来
+`PrintWindow` 能拍到画布，点击仍进不去（前台锁），而代价是每次运行都要过一次 UAC
+（本机静默，别人机器不一定）。所以插件不提权，也不建议用户“用管理员身份运行”。
+
 ## 设备控制台
 
 | 项 | 值 |

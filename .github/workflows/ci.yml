@@ -64,7 +64,12 @@ jobs:
             echo "::notice::No src/ directory; skipping syntax check."
             exit 0
           fi
-          find src -name '*.mjs' -print0 | xargs -0 -r -n1 node --check
+          # scripts/ ships in the tarball and is imported by the tests, so it
+          # needs the same parse check as src/.
+          for dir in src scripts; do
+            [ -d "$dir" ] || continue
+            find "$dir" -name '*.mjs' -print0 | xargs -0 -r -n1 node --check
+          done
 
       - name: Test
         run: |
@@ -83,3 +88,13 @@ jobs:
             exit 0
           fi
           npm test
+
+      # docs/SCENARIOS.md is generated. Catch the case where presets.mjs changed
+      # but the checked-in copy of the doc was not regenerated.
+      - name: Generated docs are current
+        run: |
+          if [ ! -f scripts/gen-scenarios-doc.mjs ]; then
+            echo "::notice::No scenario doc generator; skipping."
+            exit 0
+          fi
+          node scripts/gen-scenarios-doc.mjs --check

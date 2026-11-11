@@ -28,6 +28,14 @@ import path from 'node:path'
 import { buildTopology, twoPcLab, twoPcLabConfig, autoLayout } from '../core/build.mjs'
 import { readTopology, writeTopology, summarise } from '../core/topology.mjs'
 import {
+  LAB_IDS,
+  buildScenarioTopology,
+  hasLab,
+  labAddressing,
+  labDevices,
+} from '../core/labs.mjs'
+import { checkTopologySupport } from '../core/compat.mjs'
+import {
   enspPid,
   locateWindow,
   launchEnsp,
@@ -37,7 +45,8 @@ import {
 } from '../core/launcher.mjs'
 import { calibrateAnchors, inspectAnchors } from '../core/calibrate.mjs'
 import { pushConfig, pushConfigMany, queryDevice } from '../core/provision.mjs'
-import { SCENARIOS, renderScenario, searchScenarios, byLevel } from '../core/presets.mjs'
+import { SCENARIOS, SCENARIO_IDS, renderScenario, searchScenarios, byLevel } from '../core/presets.mjs'
+import { VERSION } from '../core/version.mjs'
 
 /** Declared hard dependency: the tool registry. */
 export const inject = ['tools']
@@ -187,10 +196,12 @@ export function apply(ctx) {
     name: 'ensp_build_topology',
     description:
       'Generate a .topo file eNSP can open. Use preset "two-pc" for the built-in two-PC lab, '
-      + 'or pass devices and links (links use VRP interface names such as GigabitEthernet0/0/0).',
+      + 'scenario for the topology behind a scenario id, or pass devices and links (links use VRP '
+      + 'interface names such as GigabitEthernet0/0/0).',
     parameters: {
       path: str('Output .topo path.'),
       preset: str('"two-pc" for the built-in lab.'),
+      scenario: str('Scenario id with a topology blueprint, e.g. "ospf-single".'),
       vlan: num('VLAN id for the two-pc preset (default 10).'),
       devices: arr('Device list: [{ name, model, x, y }].'),
       links: arr('Link list: [{ a, aPort, b, bPort }].'),
@@ -213,7 +224,14 @@ export function apply(ctx) {
     async execute(args) {
       if (!args.path) throw new Error('path is required')
       let topo
-      if (args.preset === 'two-pc' || (!args.devices && !args.links)) {
+      if (args.scenario) {
+        if (!hasLab(args.scenario)) {
+          throw new Error(
+            `scenario "${args.scenario}" has no topology blueprint; ${LAB_IDS.length} of ${SCENARIO_IDS.length} have one`,
+          )
+        }
+        topo = buildScenarioTopology(args.scenario)
+      } else if (args.preset === 'two-pc' || (!args.devices && !args.links)) {
         topo = twoPcLab({ vlan: args.vlan ?? 10 })
       } else {
         const b = buildTopology()
@@ -224,11 +242,20 @@ export function apply(ctx) {
       const target = path.resolve(args.path)
       await writeTopology(target, topo)
       const info = summarise(topo)
+      const detail = args.scenario
+        ? '\n' + labDevices(args.scenario).join('\n')
+        : ''
+      const support = checkTopologySupport(topo)
+      const warning = support.ok
+        ? ''
+        : '\nWARNING: this machine cannot start ' +
+          support.blocked.map((b) => `${b.name} (${b.model}: ${b.reason})`).join(', ') +
+          ' -- eNSP will open the file and then quit'
       return {
         path: target,
         devices: info.devices,
         links: info.links,
-        consoles: JSON.stringify(info.consoles),
+        consoles: JSON.stringify(info.consoles) + detail + warning,
       }
     },
   })
@@ -472,7 +499,7 @@ export function apply(ctx) {
   add(tools, {
     name: 'ensp_scenarios',
     description:
-      'List or search the 23 built-in configuration scenarios. Each is a skeleton: what to create, in what '
+      'List or search the ' + SCENARIO_IDS.length + ' built-in configuration scenarios. Each is a skeleton: what to create, in what '
       + 'order, and the command that proves it worked, rather than a command dump.',
     parameters: {
       search: str('Keyword filter, e.g. "ospf" or "vlan".'),
@@ -520,7 +547,10 @@ export function apply(ctx) {
     },
     async execute({ id }) {
       if (!SCENARIOS[id]) throw new Error(`unknown scenario "${id}"`)
-      return { id, brief: renderScenario(id) }
+      const brief = hasLab(id)
+        ? renderScenario(id) + `\n\n可生成拓扑: ensp_build_topology { path: "${id}.topo", scenario: "${id}" }`
+        : renderScenario(id)
+      return { id, brief }
     },
   })
 
@@ -590,6 +620,6 @@ export function apply(ctx) {
 /** Model metadata for the plugin row. */
 export const dsh = {
   name: 'dsh-ensp',
-  version: '0.1.5',
+  version: VERSION,
   description: 'Automate Huawei eNSP labs: build topology, boot devices, push config with verification.',
 }

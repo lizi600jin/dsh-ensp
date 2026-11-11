@@ -33,6 +33,15 @@ import {
 import { calibrateAnchors, inspectAnchors, DEFAULT_ANCHORS } from '../core/calibrate.mjs'
 import { pushConfig } from '../core/provision.mjs'
 import { SCENARIOS, SCENARIO_IDS, byLevel, renderScenario, searchScenarios } from '../core/presets.mjs'
+import {
+  LAB_IDS,
+  buildScenarioTopology,
+  hasLab,
+  labAddressing,
+  labDevices,
+} from '../core/labs.mjs'
+import { checkTopologySupport } from '../core/compat.mjs'
+import { writeTopology } from '../core/topology.mjs'
 
 const C = {
   dim: (s) => `\u001b[2m${s}\u001b[0m`,
@@ -51,7 +60,7 @@ ${C.bold('USAGE')}
   ensp status  [--topology <topology.topo>]
   ensp probe   [--json]
   ensp stop    [--topology <topology.topo>]
-  ensp preset  [<id>] [--search <keyword>] [--json]
+  ensp preset  [<id>] [--search <keyword>] [--topo <out.topo>] [--json]
   ensp mcp     (start the MCP server on stdio)
 
 ${C.bold('OPTIONS')}
@@ -60,6 +69,7 @@ ${C.bold('OPTIONS')}
   --save            run "save" on each device after its configuration
   --device NAME     apply only to one device
   --timeout MS      per-device readiness timeout (default 240000)
+  --topo PATH       write the scenario's topology blueprint to a .topo file
   --json            machine-readable output
   -h, --help        show this help
 
@@ -70,6 +80,7 @@ ${C.bold('EXAMPLES')}
   ensp probe
   ensp preset --search ospf
   ensp preset ospf-single
+  ensp preset campus-network --topo campus.topo
   ensp mcp
 
 ${C.bold('NOTES')}
@@ -323,9 +334,50 @@ async function cmdPreset({ positional, flags }) {
     return 0
   }
 
+  if (!SCENARIOS[id]) {
+    console.error(C.red('error:') + ` unknown scenario "${id}" · ensp preset --search <kw>`)
+    return 2
+  }
+
   try {
+    if (flags.topo) {
+      if (!hasLab(id)) {
+        console.error(
+          C.red('error:') +
+            ` scenario "${id}" has no topology blueprint yet; ${LAB_IDS.length} of ${SCENARIO_IDS.length} have one`,
+        )
+        return 2
+      }
+      const topo = buildScenarioTopology(id)
+      const target = path.resolve(String(flags.topo))
+      await writeTopology(target, topo)
+      console.log(`${C.green('wrote')} ${target}`)
+      for (const line of labDevices(id)) console.log(`  ${line}`)
+      for (const row of labAddressing(id)) {
+        console.log(`  ${row.device.padEnd(10)} ${row.port.padEnd(22)} ${row.ip.padEnd(20)} ${C.dim(row.note)}`)
+      }
+      console.log(C.dim(`  ${topo.devices.length} 台设备 · ${topo.links.length} 条链路 · ensp up ${target}`))
+
+      // Warn now rather than let `ensp up` fail later: a missing device image is
+      // invisible in the .topo file and eNSP quits without a message.
+      const support = checkTopologySupport(topo)
+      if (!support.ok) {
+        console.error('')
+        for (const b of support.blocked) {
+          console.error(`${C.yellow('warning:')} ${b.name} (${b.model}) ${b.reason}`)
+        }
+        console.error(
+          C.dim('  这台机器装不上该机型时，eNSP 会打开拓扑后自行退出，ensp up 会直接报错。'),
+        )
+      }
+      return 0
+    }
+
     const text = renderScenario(id)
     console.log(flags.json ? JSON.stringify(SCENARIOS[id], null, 2) : text)
+    if (hasLab(id)) {
+      console.log(C.dim(`\n可生成拓扑: ensp preset ${id} --topo ${id}.topo`))
+    }
     return 0
   } catch (error) {
     console.error(C.red('error:') + ' ' + error.message)

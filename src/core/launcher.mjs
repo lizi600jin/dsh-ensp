@@ -34,6 +34,8 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { calibrateAnchors, DEFAULT_ANCHORS } from './calibrate.mjs'
+import { checkTopologySupport, describeBlocked, rootFromExe } from './compat.mjs'
+import { readTopology } from './topology.mjs'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -106,8 +108,39 @@ public class EnspWin {
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, IntPtr e);
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint flags);
 
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+
+  /** PID that owns a window handle. */
+  public static uint PidOf(IntPtr h) {
+    if (h == IntPtr.Zero) return 0;
+    uint p; GetWindowThreadProcessId(h, out p); return p;
+  }
+
+  /**
+   * PID of the top-level window that would receive a click at (x, y).
+   *
+   * This is how occlusion is detected: a click goes to whatever window owns the
+   * pixel, not to the window we think we are driving. When another application
+   * covers eNSP the returned PID is that application's, so the caller can refuse
+   * to click instead of silently clicking the wrong window.
+   */
+  public static uint OwnerPidAt(int x, int y) {
+    var pt = new POINT(); pt.X = x; pt.Y = y;
+    IntPtr h = WindowFromPoint(pt);
+    if (h == IntPtr.Zero) return 0;
+    IntPtr root = GetAncestor(h, 2); // GA_ROOT
+    return PidOf(root != IntPtr.Zero ? root : h);
+  }
+
+  /** Display name of a PID, for error messages. Never throws. */
+  public static string ProcessNameOf(uint pid) {
+    try { return System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; }
+    catch { return "pid " + pid; }
+  }
 
   public static IntPtr FindMain(uint pid) {
     IntPtr found = IntPtr.Zero;
@@ -250,6 +283,16 @@ export async function launchEnsp({ topology, exspPath, readyTimeoutMs = 120000 }
   const exe = exspPath ?? process.env.DSH_ENSP_EXE ?? 'E:\\Huawei\\eNSP\\eNSP_Client.exe'
   const target = topology ? path.resolve(topology) : null
 
+  // Reject topologies whose devices have no installed image *before* starting the
+  // client. Opening one otherwise looks fine for a few seconds — eNSP paints the
+  // canvas and then exits by itself, which surfaces later as a pile of
+  // "console never answered" errors that point at the wrong thing.
+  if (target) {
+    const parsed = await readTopology(target)
+    const support = checkTopologySupport(parsed, { root: rootFromExe(exe) })
+    if (!support.ok) throw new Error(describeBlocked(support))
+  }
+
   // Reuse an existing window only when it renders something; a blank window is a
   // dead instance that would otherwise be reported as success.
   const existing = enspPid()
@@ -364,7 +407,13 @@ function startDetached(exe, topology) {
   // The client must outlive the tool call, otherwise every follow-up (start
   // devices, push config) finds a dead console.
   const cmdline = topology ? `"${exe}" "${topology}"` : `"${exe}"`
-  const r = runPowerShell(
+
+  // Two launch paths, tried in order. WMI is the cleanest when it works: one
+  // call, a real PID, and the client owns no parent. On some machines WMI
+  // refuses the request outright with `ReturnValue 8` (the process could not be
+  // started, usually a permissions or token change); `Start-Process -PassThru`
+  // from the same hidden PowerShell then works and the client still outlives it.
+  const attempts = [
     `
 $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
   CommandLine = '${cmdline.replace(/'/g, "''")}'
@@ -372,12 +421,22 @@ $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
 if ($r.ReturnValue -ne 0) { 'ERR ' + $r.ReturnValue; exit 0 }
 'pid=' + $r.ProcessId
 `,
-    { timeoutMs: 30000 },
-  )
-  if (!r.ok || !/pid=\d+/.test(r.stdout)) {
-    throw new Error(`could not launch eNSP: ${r.stdout || r.stderr || 'WMI refused the request'}`)
+    `
+$p = Start-Process -FilePath '${exe.replace(/'/g, "''")}'${topology ? ` -ArgumentList '${topology.replace(/'/g, "''")}'` : ''} -PassThru
+'pid=' + $p.Id
+`,
+  ]
+
+  const failures = []
+  for (const body of attempts) {
+    const r = runPowerShell(body, { timeoutMs: 30000 })
+    if (r.ok) {
+      const m = /pid=(\d+)/.exec(r.stdout)
+      if (m) return Number(m[1])
+    }
+    failures.push(r.stdout || r.stderr || `exit ${r.status}`)
   }
-  return Number(/pid=(\d+)/.exec(r.stdout)[1])
+  throw new Error(`could not launch eNSP: ${failures.join(' / ')}`)
 }
 
 /**
@@ -523,6 +582,54 @@ export function minimiseEnsp(hwnd) {
 }
 
 /**
+ * Is the eNSP window covered by something else?
+ *
+ * Calibration reads the screen, so an occluded window produces a screenshot of
+ * whatever is on top of it and the measured anchors are garbage. Rather than
+ * clicking on a guess, probe several points of the window frame and report the
+ * first foreign process that owns one of them.
+ *
+ * @param {string} hwnd
+ * @returns {{occluded: boolean, by?: string, at?: string}}
+ */
+export function checkOcclusion(hwnd) {
+  const r = runPowerShell(
+    `
+$h = [IntPtr]::new([int64]${hwnd})
+$rect = New-Object EnspWin+RECT
+[void][EnspWin]::GetWindowRect($h, [ref]$rect)
+$self = [EnspWin]::PidOf($h)
+$w = $rect.R - $rect.L
+$hg = $rect.B - $rect.T
+# A grid rather than a handful of points: partial coverage of the toolbar strip
+# is exactly the case that corrupts calibration, and it is easy to miss when
+# only the middle of the window is sampled.
+$xs = @(0.5, 0.2, 0.35, 0.65, 0.8)
+$ys = @(0.06, 0.25, 0.5, 0.75)
+foreach ($fy in $ys) {
+  foreach ($fx in $xs) {
+    $px = $rect.L + [int]($w * $fx)
+    $py = $rect.T + [int]($hg * $fy)
+    $owner = [EnspWin]::OwnerPidAt($px, $py)
+    if ($owner -ne 0 -and $owner -ne $self) {
+      'OCCLUDED ' + $px + ',' + $py + ' ' + $owner + ' ' + [EnspWin]::ProcessNameOf($owner)
+      return
+    }
+  }
+}
+'clear'
+`,
+    { timeoutMs: 20000 },
+  )
+  const text = r.stdout.split('\n').filter(Boolean).pop() || ''
+  if (text.startsWith('OCCLUDED')) {
+    const f = text.split(' ')
+    return { occluded: true, at: f[1], by: `${f[3] ?? ''} (${f[4] ?? 'unknown'})`.trim() }
+  }
+  return { occluded: false }
+}
+
+/**
  * Click the "start all devices" toolbar button.
  *
  * Coordinates are **window-relative** and were measured against the client's
@@ -530,8 +637,19 @@ export function minimiseEnsp(hwnd) {
  * the window. See `docs/UI-ANCHORS.md` for how they were obtained and how to
  * re-measure after an eNSP or DPI change.
  *
+ * ## The click is verified, not assumed
+ *
+ * A synthetic click lands on whichever window owns the pixel. When another
+ * application covers eNSP the mouse events go there and eNSP never sees them,
+ * yet every step reports success and the caller then waits for devices that
+ * were never started. That failure was observed for real (a full-screen VMware
+ * window sitting on top). So the owner of the pixel is looked up with
+ * `WindowFromPoint` first: if it is not the eNSP process, no click is sent and
+ * the error names the process that is in the way.
+ *
  * @param {string} hwnd
- * @param {{button?: 'start'|'stop', offsets?: {start: [number, number], stop: [number, number]}}} [options]
+ * @param {{button?: 'start'|'stop', anchors?: object}} [options]
+ * @returns {{ok: boolean, clicked: boolean, detail: string, occludedBy?: string}}
  */
 export function clickToolbar(hwnd, options = {}) {
   const { button = 'start' } = options
@@ -550,12 +668,37 @@ $rect = New-Object EnspWin+RECT
 # screenshot uses. Do not add a client-area offset here.
 $cx = $rect.L + ${ox}
 $cy = $rect.T + ${oy}
+$self = [EnspWin]::PidOf($h)
+$owner = [EnspWin]::OwnerPidAt($cx, $cy)
+if ($owner -ne 0 -and $owner -ne $self) {
+  'OCCLUDED ' + $cx + ',' + $cy + ' ' + $owner + ' ' + [EnspWin]::ProcessNameOf($owner)
+  exit 3
+}
 [EnspWin]::Click($cx, $cy)
+$after = [EnspWin]::OwnerPidAt($cx, $cy)
+if ($after -ne 0 -and $after -ne $self) {
+  'STOLEN ' + $cx + ',' + $cy + ' ' + $after + ' ' + [EnspWin]::ProcessNameOf($after)
+  exit 4
+}
 'clicked ' + $cx + ',' + $cy
 `,
     { timeoutMs: 20000 },
   )
-  return { ok: r.ok, detail: r.stdout.split('\n').pop() || r.stderr }
+  const detail = r.stdout.split('\n').filter(Boolean).pop() || r.stderr || ''
+  const fields = detail.split(' ')
+  if (fields[0] === 'OCCLUDED' || fields[0] === 'STOLEN') {
+    const who = `${fields[3] ?? ''} (${fields[4] ?? 'unknown'})`.trim()
+    return {
+      ok: false,
+      clicked: false,
+      occludedBy: who,
+      detail:
+        `eNSP is covered by another window at ${fields[1]}: ${who}. ` +
+        'The mouse events would go to that window, so nothing was clicked. ' +
+        'Bring eNSP to the front (restore it from the taskbar) and try again.',
+    }
+  }
+  return { ok: r.ok, clicked: r.ok, detail }
 }
 
 /**
@@ -650,6 +793,17 @@ export async function startAllDevices({
   }
 
   report({ phase: 'calibrate', hwnd })
+  // Calibration photographs the screen, so an occluded window yields anchors
+  // measured on the wrong pixels. Check first, and say who is in the way.
+  const occlusion = checkOcclusion(hwnd)
+  if (occlusion.occluded) {
+    throw new Error(
+      `eNSP is covered by ${occlusion.by} at ${occlusion.at}, so its toolbar cannot be located or clicked. ` +
+        'Windows does not let another process raise a foreign window, so this has to be fixed by hand: ' +
+        'minimise or close the window that is on top, bring eNSP to the front, then run the command again.',
+    )
+  }
+
   let anchors
   try {
     anchors = calibrateAnchors(hwnd)
@@ -674,6 +828,11 @@ export async function startAllDevices({
 
   report({ phase: 'click', button: 'start', anchor: anchors.start })
   const click = clickToolbar(hwnd, { button: 'start', anchors })
+  if (!click.clicked) {
+    // Never fall through to waiting on consoles: without a click no device will
+    // ever boot, and a long wait would hide the real cause.
+    throw new Error(click.detail || 'the start button could not be clicked')
+  }
 
   // Hand the desktop back immediately; boot continues without the window.
   if (minimise) {

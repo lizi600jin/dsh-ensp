@@ -99,15 +99,67 @@ await waitForOutput({ port: 2000, command: 'display ip routing-table', until: /2
 
 ### 场景预设
 
-内置 23 个场景，覆盖 VLAN、STP、静态路由、RIP、OSPF、BGP、NAT、DHCP、ACL、IPsec、IPv6、WLAN、IS-IS 等主题。
+内置 50 个场景，覆盖 VLAN、STP、堆叠、链路聚合、静态路由、RIP、OSPF、BGP、IS-IS、MPLS、组播、NAT、DHCP、ACL、QoS、端口安全、IPsec、IPv6、WLAN、防火墙与高可用等主题。
 
 ```bash
-ensp preset                      # 按难度列出全部
-ensp preset ospf-single          # 查看某个场景
-ensp preset --search bgp         # 按关键词搜索
+ensp preset                          # 按难度列出全部
+ensp preset ospf-single              # 查看某个场景
+ensp preset --search bgp             # 按关键词搜索
+ensp preset campus-network --topo campus.topo   # 生成该场景的拓扑
 ```
 
 每个场景给出三项信息：需要创建的对象、配置顺序、用于确认结果的检查命令。具体命令由使用者按设备补全。
+
+场景自带拓扑蓝图：设备、链路、地址规划都是现成的，加上 `--topo` 就直接得到一个 eNSP 能打开的 `.topo`，不用先自己画图再算 IP。蓝图不含配置命令，场景仍然只是骨架。
+
+```bash
+ensp preset ospf-single --topo ospf-single.topo
+ensp up ospf-single.topo
+```
+
+场景清单与蓝图都是可生成、可校验的。`docs/SCENARIOS.md` 由 `src/core/presets.mjs` 与 `src/core/labs.mjs` 渲染而来，`npm run docs:check` 在两者不一致时返回非零，CI 也会执行这一步。
+
+```bash
+npm run docs          # 重新生成 docs/SCENARIOS.md
+npm run docs:check    # 只检查是否过期
+```
+
+### 设备镜像检查
+
+部分机型只有设备目录条目、没有随装镜像，最典型的是 `USG6000V`（eNSP 安装时需勾选该组件）。这类机型放上画布、存成 `.topo` 都没问题，但 eNSP 打开后会先渲染再自行退出，事后只能看到一堆“控制台无响应”，很容易误判成拓扑或插件的问题。
+
+`ensp up` 启动客户端之前会读 `res/items.xml` 与各插件的镜像文件，把启动不了的设备连同缺什么一起报出来：
+
+```console
+$ ensp up firewall-hrp.topo
+error: topology uses devices this eNSP installation cannot start:
+  USG6000V (FW1, FW2): NGFW 镜像未安装（eNSP 安装时需勾选 USG6000V 组件）
+
+This is not a bug in the topology: eNSP opens it, renders it, then quits. ...
+```
+
+`ensp preset ... --topo` 生成文件时也会给出同样的提示，`ensp_build_topology` 的返回值里带 `unsupportedDevices`。检查只读本机文件，不启动 eNSP。设备清单见 [docs/SCENARIOS.md](docs/SCENARIOS.md) 每个场景的“设备镜像”一行。
+
+### 窗口遮挡检查
+
+启动设备只能点 eNSP 的工具栏按钮，而合成点击落在**拥有那个像素的窗口**上。别的程序盖住 eNSP 时，鼠标事件全被它接走，eNSP 一条都收不到，结果就是报了一连串成功、然后等一批从未启动的设备。
+
+插件在点击前用 `WindowFromPoint` 查落点属主，不是 eNSP 就不点，直接报：
+
+```console
+$ ensp up lab.topo
+error: eNSP is covered by another window at 1307,426: vmware (unknown).
+The mouse events would go to that window, so nothing was clicked.
+Bring eNSP to the front (restore it from the taskbar) and try again.
+```
+
+标定之前还会扫一张 5×4 的采样网格，任一采样点被外人占住就拒绝开始，因为标定量的是屏幕像素，被遮挡时量到的全是别人的画面。点击后再查一次，防止点击瞬间被抢。
+
+插件不能自己把 eNSP 提到前台，这一点值得说清楚，因为它决定了你该怎么用。eNSP 的 exe 要求管理员权限，所以它总以 High 完整性级别运行；普通进程属于 Medium，Windows 的 UIPI 会拦下所有发往高完整性窗口的输入消息（`WM_LBUTTONDOWN` 返回 `err=5`）。提到 High 之后 UIPI 放行，但 Windows 的前台锁仍然不允许一个后台进程改前台（`SetForegroundWindow` 返回 `False`，`AttachThreadInput` 被拒）。两条路都堵着，所以 eNSP 必须由你保持在最上层，并且你在那个桌面上。
+
+还有一点：**不要用管理员身份运行本工具**。提权只让 `PrintWindow` 能拍到画布，点击照样进不去，还多过一次 UAC。
+
+Windows 不允许一个进程把别人的窗口提到前台，`SetWindowPos`/`ShowWindow`/`BringWindowToTop` 全返回 `ERROR_ACCESS_DENIED`，所以这里没有自动修复，只能由人把 eNSP 放到最上层。细节与实测记录见 [docs/UI-ANCHORS.md](docs/UI-ANCHORS.md)。
 
 ## 安装
 

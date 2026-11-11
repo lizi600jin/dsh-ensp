@@ -23,25 +23,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises'
 
-/**
- * Must stay in sync with build.mjs `MODEL_SPECS` (duplicated to avoid a circular
- * import). Each model lists its `<interface>` declarations **exactly as eNSP
- * writes them**; see `docs/ENSP-FORMAT.md`.
- */
-const MODEL_SPECS = {
-  S5700: { groups: [['Ethernet', 'GE', 24, 1]] },
-  S3700: { groups: [['Ethernet', 'Ethernet', 22, 1], ['Ethernet', 'GE', 2, 1]] },
-  AR2220: { groups: [['Ethernet', 'GE', 1, 0], ['Ethernet', 'GE', 2, 1]] },
-  AR2240: { groups: [['Ethernet', 'GE', 4, 0]] },
-  AR1220: { groups: [['Ethernet', 'GE', 2, 0], ['Ethernet', 'Ethernet', 8, 0]] },
-  USG5500: { groups: [['Ethernet', 'GE', 9, 0]] },
-  USG6000V: { groups: [['Ethernet', 'GE', 9, 0]] },
-  AC6005: { groups: [['Ethernet', 'GE', 8, 1]] },
-  // PC/Server declare GE in the file but expose Ethernet0/0/1 on the CLI.
-  PC: { groups: [['Ethernet', 'GE', 1, 1, 'Ethernet0/0/']] },
-  Server: { groups: [['Ethernet', 'GE', 1, 1, 'Ethernet0/0/']] },
-  Cloud: { groups: [['Ethernet', 'Ethernet', 3, 0]] },
-}
+import { MODEL_SPECS, GEOMETRY, portCount, flatIndexToVrp, vrpToFlatIndex } from './models.mjs'
 
 /**
  * Icon bounding box, measured from every cable anchor in eNSP's own samples.
@@ -64,50 +46,17 @@ const ICON = {
 }
 
 /**
- * Interfaces exposed by each model eNSP can run, in declaration order.
- * `prefix` + index (offset by `base`) gives the VRP name.
- *
- * Only the models this project actually uses are listed; add more as needed.
- */
-export const MODELS = {
-  S5700: { ports: [{ prefix: 'GigabitEthernet0/0/', count: 24, base: 1 }], comPort: true },
-  S3700: { ports: [{ prefix: 'Ethernet0/0/', count: 24, base: 1 }], comPort: true },
-  AR2220: { ports: [{ prefix: 'GigabitEthernet0/0/', count: 3, base: 0 }], comPort: true },
-  AR2240: { ports: [{ prefix: 'GigabitEthernet0/0/', count: 4, base: 0 }], comPort: true },
-  AR1220: { ports: [{ prefix: 'GigabitEthernet0/0/', count: 8, base: 0 }], comPort: true },
-  USG5500: { ports: [{ prefix: 'GigabitEthernet1/0/', count: 9, base: 0 }], comPort: true },
-  USG6000V: { ports: [{ prefix: 'GigabitEthernet1/0/', count: 9, base: 0 }], comPort: true },
-  AC6005: { ports: [{ prefix: 'GigabitEthernet0/0/', count: 8, base: 1 }], comPort: true },
-  PC: { ports: [{ prefix: 'Ethernet0/0/', count: 1, base: 1 }], comPort: false },
-  Server: { ports: [{ prefix: 'Ethernet0/0/', count: 1, base: 1 }], comPort: false },
-  Cloud: { ports: [{ prefix: 'Ethernet0/0/', count: 32, base: 0 }], comPort: false },
-}
-
-/** Canvas geometry constants, taken from eNSP's own writer. */
-export const GEOMETRY = {
-  editLeftOffset: 27,
-  editTopOffset: 54,
-}
-
-/**
  * Resolve a flat interface index into a VRP interface name for a model.
+ *
+ * Thin wrapper over {@link flatIndexToVrp} so the parsing code and the builder
+ * share one table.
  *
  * @param {string} model
  * @param {number} index
  * @returns {string|null}
  */
 export function interfaceName(model, index) {
-  const spec = MODEL_SPECS[model]
-  if (!spec) return null
-  let remaining = index
-  for (const group of spec.groups) {
-    const [, enspPrefix, count, firstNumber, cliOverride] = group
-    const cli = cliOverride ?? (enspPrefix === 'GE' ? 'GigabitEthernet0/0/' : 'Ethernet0/0/')
-    const first = firstNumber ?? (cli.startsWith('Gigabit') ? 0 : 0)
-    if (remaining < count) return `${cli}${remaining + first}`
-    remaining -= count
-  }
-  return null
+  return flatIndexToVrp(model, index)
 }
 
 /**
@@ -118,30 +67,7 @@ export function interfaceName(model, index) {
  * @returns {number|null} flat index, or null when the name does not belong to the model
  */
 export function interfaceIndex(model, name) {
-  const spec = MODEL_SPECS[model]
-  if (!spec) return null
-  let offset = 0
-  for (const group of spec.groups) {
-    const [, enspPrefix, count, firstNumber, cliOverride] = group
-    const cli = cliOverride ?? (enspPrefix === 'GE' ? 'GigabitEthernet0/0/' : 'Ethernet0/0/')
-    const first = firstNumber ?? 0
-    if (name.startsWith(cli)) {
-      const tail = name.slice(cli.length)
-      if (/^\d+$/.test(tail)) {
-        const n = Number(tail) - first
-        if (n >= 0 && n < count) return offset + n
-      }
-    }
-    offset += count
-  }
-  return null
-}
-
-/** Total declared interface count for a model. */
-function portCount(model) {
-  const spec = MODELS[model]
-  if (!spec) return 0
-  return spec.ports.reduce((sum, g) => sum + g.count, 0)
+  return vrpToFlatIndex(model, name)
 }
 
 /** Decode one attribute from a tag's raw text. */

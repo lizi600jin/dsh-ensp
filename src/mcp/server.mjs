@@ -22,6 +22,14 @@ import path from 'node:path'
 import { buildTopology, twoPcLab, twoPcLabConfig, autoLayout, MODEL_SPECS } from '../core/build.mjs'
 import { readTopology, writeTopology, summarise } from '../core/topology.mjs'
 import {
+  LAB_IDS,
+  buildScenarioTopology,
+  hasLab,
+  labAddressing,
+  labDevices,
+} from '../core/labs.mjs'
+import { checkTopologySupport } from '../core/compat.mjs'
+import {
   enspPid,
   locateWindow,
   launchEnsp,
@@ -32,8 +40,9 @@ import {
 import { calibrateAnchors, inspectAnchors, DEFAULT_ANCHORS } from '../core/calibrate.mjs'
 import { pushConfig, pushConfigMany, queryDevice } from '../core/provision.mjs'
 import { SCENARIOS, SCENARIO_IDS, byLevel, renderScenario, searchScenarios } from '../core/presets.mjs'
+import { PACKAGE_NAME, VERSION } from '../core/version.mjs'
 
-const SERVER_INFO = { name: 'dsh-ensp', version: '0.1.0' }
+const SERVER_INFO = { name: PACKAGE_NAME, version: VERSION }
 
 /** JSON-schema helpers to keep the tool table readable. */
 const obj = (properties, required = []) => ({ type: 'object', properties, required })
@@ -75,10 +84,12 @@ const TOOLS = [
     name: 'ensp_build_topology',
     description:
       'Generate a .topo file. Use `preset: "two-pc"` for the built-in two-PC/one-switch lab, ' +
-      'or pass `devices` and `links` explicitly. Returns the written path and a summary.',
+      '`scenario` to build the topology behind a scenario id, or pass `devices` and `links` ' +
+      'explicitly. Returns the written path and a summary.',
     inputSchema: obj({
       path: { type: 'string', description: 'output .topo path' },
       preset: { type: 'string', enum: ['two-pc'], description: 'built-in lab' },
+      scenario: { type: 'string', description: 'scenario id with a topology blueprint' },
       vlan: { type: 'number', description: 'for preset two-pc (default 10)' },
       subnet: { type: 'string', description: 'for preset two-pc (default 192.168.10)' },
       devices: {
@@ -105,7 +116,14 @@ const TOOLS = [
     }),
     async run(args) {
       let topo
-      if (args.preset === 'two-pc' || (!args.devices && !args.links)) {
+      if (args.scenario) {
+        if (!hasLab(args.scenario)) {
+          throw new Error(
+            `scenario "${args.scenario}" has no topology blueprint; ${LAB_IDS.length} of ${SCENARIO_IDS.length} have one: ${LAB_IDS.join(', ')}`,
+          )
+        }
+        topo = buildScenarioTopology(args.scenario)
+      } else if (args.preset === 'two-pc' || (!args.devices && !args.links)) {
         topo = twoPcLab({ vlan: args.vlan ?? 10, subnet: args.subnet ?? '192.168.10' })
       } else {
         const b = buildTopology()
@@ -115,7 +133,15 @@ const TOOLS = [
       }
       const target = path.resolve(args.path)
       await writeTopology(target, topo)
-      return { path: target, ...summarise(topo) }
+      const support = checkTopologySupport(topo)
+      return {
+        path: target,
+        ...summarise(topo),
+        ...(args.scenario
+          ? { scenario: args.scenario, devices: labDevices(args.scenario), addressing: labAddressing(args.scenario) }
+          : {}),
+        ...(support.ok ? {} : { unsupportedDevices: support.blocked }),
+      }
     },
   },
   {
@@ -263,7 +289,7 @@ const TOOLS = [
   {
     name: 'ensp_scenarios',
     description:
-      'List or search the built-in configuration scenarios (23 of them, mirroring the labs ' +
+      'List or search the built-in configuration scenarios (' + SCENARIO_IDS.length + ' of them, mirroring the labs ' +
       'shipped with eNSP plus verified project scenarios). Each entry is a skeleton: what to ' +
       'create, in what order, and the command that proves it worked — not a command dump.',
     inputSchema: obj({
@@ -296,7 +322,13 @@ const TOOLS = [
     inputSchema: obj({ id: { type: 'string' } }, ['id']),
     async run({ id }) {
       if (!SCENARIOS[id]) throw new Error(`unknown scenario "${id}"`)
-      return { id, brief: renderScenario(id), data: SCENARIOS[id] }
+      return {
+        id,
+        brief: renderScenario(id),
+        data: SCENARIOS[id],
+        hasTopology: hasLab(id),
+        ...(hasLab(id) ? { devices: labDevices(id), addressing: labAddressing(id) } : {}),
+      }
     },
   },
   {

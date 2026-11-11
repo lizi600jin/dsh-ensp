@@ -25,115 +25,37 @@
 
 import { randomUUID } from 'node:crypto'
 
-import { serialiseTopology, interfaceIndex } from './topology.mjs'
+import {
+  MODEL_SPECS,
+  ICON,
+  describePorts,
+  vrpToFlatIndex,
+} from './models.mjs'
+import { serialiseTopology } from './topology.mjs'
 
-/**
- * Interface declarations per model, in slot order, plus the index base.
- *
- * `prefix` is what eNSP writes in `interfacename=`; `vrp` is the name the device
- * itself uses, which differs for switches (`GE` in the file, `GigabitEthernet`
- * on the CLI).
- */
-/**
- * Interface declarations per model, **in the exact grouping eNSP writes**.
- *
- * This grouping is not cosmetic. eNSP reconstructs a device's port list from these
- * `<interface>` elements; a single `count="3"` on an AR2220 does not parse into
- * GE0/0/0 + GE0/0/1..2 and the device silently fails to render (empty canvas, no
- * error). The groups below were counted across all 40 bundled sample topologies.
- *
- * `vrp` is the CLI prefix; indices walk the groups in order from 0.
- */
-export const MODEL_SPECS = {
-  // 24 GE ports, all in one group.
-  S5700: { groups: [['Ethernet', 'GE', 24, 1]], base: 1, vrp: 'GigabitEthernet0/0/', console: true },
-  // 22 fast ports (Ethernet0/0/1..22) then 2 gigabit (GE0/0/1..2).
-  S3700: {
-    groups: [['Ethernet', 'Ethernet', 22, 1], ['Ethernet', 'GE', 2, 1]],
-    base: 1,
-    vrp: 'Ethernet0/0/',
-    console: true,
-  },
-  // 1 + 2: GE0/0/0, then GE0/0/1..2 — the split is required, and the second group
-  // starts numbering at 1, not 0.
-  AR2220: { groups: [['Ethernet', 'GE', 1, 0], ['Ethernet', 'GE', 2, 1]], base: 0, vrp: 'GigabitEthernet0/0/', console: true },
-  AR2240: { groups: [['Ethernet', 'GE', 4, 0]], base: 0, vrp: 'GigabitEthernet0/0/', console: true },
-  // 2 GE (GE0/0/0..1) + 8 Ethernet (Ethernet0/0/0..7).
-  AR1220: {
-    groups: [['Ethernet', 'GE', 2, 0], ['Ethernet', 'Ethernet', 8, 0]],
-    base: 0,
-    vrp: 'GigabitEthernet0/0/',
-    console: true,
-  },
-  USG5500: { groups: [['Ethernet', 'GE', 9, 0]], base: 0, vrp: 'GigabitEthernet1/0/', console: true },
-  USG6000V: { groups: [['Ethernet', 'GE', 9, 0]], base: 0, vrp: 'GigabitEthernet1/0/', console: true },
-  AC6005: { groups: [['Ethernet', 'GE', 8, 1]], base: 1, vrp: 'GigabitEthernet0/0/', console: true },
-  // NOTE: the file says `interfacename="GE"` but the CLI port is Ethernet0/0/1 —
-  // eNSP's file vocabulary and VRP's CLI vocabulary differ for this model.
-  // Declares `interfacename="GE"` but the CLI port is Ethernet0/0/1 — eNSP's file
-  // vocabulary and VRP's vocabulary differ here, so the CLI family is explicit.
-  PC: { groups: [['Ethernet', 'GE', 1, 1, 'Ethernet0/0/']], base: 1, vrp: 'Ethernet0/0/', console: false },
-  Server: { groups: [['Ethernet', 'GE', 1, 1, 'Ethernet0/0/']], base: 1, vrp: 'Ethernet0/0/', console: false },
-  Cloud: { groups: [['Ethernet', 'Ethernet', 3, 0]], base: 0, vrp: 'Ethernet0/0/', console: false },
-}
-
-/** Total ports across groups. */
-function totalPorts(spec) {
-  return spec.groups.reduce((n, g) => n + g[2], 0)
-}
-
-/**
- * Resolve a VRP interface name to the flat index eNSP stores.
- *
- * The flat index walks every declared group, so on an AR1220 index 2 is the first
- * `Ethernet` port, not `GE0/0/2`.
- */
-export function vrpToFlatIndex(model, port) {
-  const spec = MODEL_SPECS[model]
-  if (!spec) return null
-
-  // A model can expose several CLI families (AR1220: GE for its 2 gigabit ports,
-  // Ethernet for its 8 fast ports), and the flat index simply continues across them
-  // in declaration order. Walk the groups and test each group's own CLI prefix.
-  let offset = 0
-  for (const group of spec.groups) {
-    const [, enspPrefix, count] = group
-    const firstNumber = group[3] ?? spec.base
-    const cliPrefix = group[4] ?? cliPrefixFor(enspPrefix)
-    if (port.startsWith(cliPrefix)) {
-      const tail = port.slice(cliPrefix.length)
-      if (/^\d+$/.test(tail)) {
-        const n = Number(tail) - firstNumber
-        if (n >= 0 && n < count) return offset + n
-      }
-    }
-    offset += count
-  }
-  return null
-}
-
-/** CLI prefix for an eNSP interface-name group. */
-function cliPrefixFor(enspPrefix) {
-  return enspPrefix === 'GE' ? 'GigabitEthernet0/0/' : 'Ethernet0/0/'
-}
-
-/** Canvas geometry, matching eNSP's own writer. */
-export const ICON = { w: 86, h: 86, left: -16.2, right: 70.2, top: -16.2, bottom: 70.2 }
+// Re-exported so callers that only need the table plus the builder keep one
+// import. The authoritative definitions live in models.mjs.
+export { MODEL_SPECS, ICON, vrpToFlatIndex, flatIndexToVrp } from './models.mjs'
 
 /**
  * `settings` blob eNSP writes for a simulated PC. Empty for every other model.
  * Without it eNSP still shows the PC but with no address, which breaks the
  * "ping between the two PCs" step.
  */
-function pcSettings({ ip = '192.168.10.1', mask = '255.255.255.0', gateway = '192.168.10.254', mac } = {}) {
+function pcSettings({ ip = '192.168.10.1', mask = '255.255.255.0', gateway = '192.168.10.254', mac, dhcp = false } = {}) {
   const macAddr = mac ?? `54-89-98-${Array.from({ length: 3 }, () =>
     Math.floor(Math.random() * 256).toString(16).toUpperCase().padStart(2, '0')).join('-')}`
+  // A DHCP client must not carry a static address, or eNSP keeps using it and the
+  // pool is never exercised. -simpc_dhcp_state 1 is what makes the PC ask.
+  const addressing = dhcp
+    ? ' -simpc_ip 0.0.0.0  -simpc_mask 0.0.0.0  -simpc_gateway 0.0.0.0'
+    : ` -simpc_ip ${ip}  -simpc_mask ${mask}  -simpc_gateway ${gateway}`
   return (
-    ` -simpc_ip ${ip}  -simpc_mask ${mask}  -simpc_gateway ${gateway}  -simpc_mac ${macAddr}` +
+    `${addressing}  -simpc_mac ${macAddr}` +
     '  -simpc_mc_dstip 0.0.0.0  -simpc_mc_dstmac 00-00-00-00-00-00' +
     '  -simpc_dns1 0.0.0.0  -simpc_dns2 0.0.0.0' +
     '  -simpc_ipv6 ::  -simpc_prefix 128  -simpc_gatewayv6 ::' +
-    '  -simpc_dhcp_state 0  -simpc_dhcpv6_state 0  -simpc_dns_auto_state 0 '
+    `  -simpc_dhcp_state ${dhcp ? 1 : 0}  -simpc_dhcpv6_state 0  -simpc_dns_auto_state 0 `
   )
 }
 
@@ -173,7 +95,7 @@ export class TopologyBuilder {
       id: randomUUID(),
       name,
       model,
-      settings: model === 'PC' ? pcSettings(options.pc) : '',
+      settings: model === 'PC' ? pcSettings(options.pc).trim() : '',
       comPort,
       bootmode: options.bootmode ?? 1,
       x: options.x ?? 100,
@@ -216,12 +138,9 @@ export class TopologyBuilder {
     if (!spec) throw new Error(`unknown model "${device.model}"`)
     const index = vrpToFlatIndex(device.model, port)
     if (index === null) {
-      const all = spec.groups
-        .map((g) => {
-          const first = g[3] ?? spec.base
-          return `${cliPrefixFor(g[1])}${first}..${first + g[2] - 1}`
-        })
-        .join(', ')
+      // Firewalls and PCs override the CLI family, so the shared helper is the
+      // only reliable way to describe what this model actually accepts.
+      const all = describePorts(device.model)
       throw new Error(
         `${device.name} (${device.model}) has no interface ${port}; expected one of: ${all}`,
       )

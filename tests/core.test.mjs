@@ -8,6 +8,7 @@
  */
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { viewOf, hostnameOf } from '../src/core/console.mjs'
@@ -249,4 +250,146 @@ test('generated topology renders (documents the zombie-process trap)', async () 
 
   // the file must be parseable back
   assert.equal(parseTopology(xml).devices.length, 3)
+})
+
+/* ------------------------------------------------------------------ presets */
+
+test('scenario catalogue is complete and internally consistent', async () => {
+  // The catalogue is the product's main surface for teaching; a malformed entry
+  // shows up as a broken `ensp preset` listing rather than a crash, so it needs a
+  // test of its own. `validateScenarios` is the same function the doc generator
+  // runs before writing docs/SCENARIOS.md.
+  const { validateScenarios } = await import('../scripts/gen-scenarios-doc.mjs')
+  assert.deepEqual(validateScenarios(), [])
+
+  const { SCENARIOS, SCENARIO_IDS, byLevel } = await import('../src/core/presets.mjs')
+  assert.equal(SCENARIO_IDS.length, Object.keys(SCENARIOS).length)
+
+  const groups = byLevel()
+  assert.equal(
+    groups.basic.length + groups.intermediate.length + groups.advanced.length,
+    SCENARIO_IDS.length,
+    'every scenario falls in exactly one level bucket',
+  )
+})
+
+test('every scenario can be rendered as a skeleton brief', async () => {
+  const { SCENARIO_IDS, renderScenario, searchScenarios } = await import('../src/core/presets.mjs')
+  for (const id of SCENARIO_IDS) {
+    const brief = renderScenario(id)
+    assert.ok(brief.includes('## 配置顺序'), `${id}: missing step list`)
+    assert.ok(brief.includes('## 易错点'), `${id}: missing pitfalls section`)
+    assert.ok(brief.length > 200, `${id}: brief is too short to be useful`)
+  }
+  // search must reach the newly added advanced scenarios, not just the old ones
+  const hits = searchScenarios('mpls').map((h) => h.id)
+  assert.ok(hits.includes('mpls-basic'))
+  assert.ok(hits.includes('mpls-l3vpn'))
+})
+
+/* -------------------------------------------------------------------- labs */
+
+test('every topology blueprint builds a parseable .topo', async () => {
+  const { LABS, LAB_IDS, buildScenarioTopology } = await import('../src/core/labs.mjs')
+  const { SCENARIOS } = await import('../src/core/presets.mjs')
+  assert.ok(LAB_IDS.length > 0)
+
+  for (const id of LAB_IDS) {
+    // a blueprint without a matching scenario is unreachable from the CLI
+    assert.ok(SCENARIOS[id], `blueprint "${id}" has no scenario of the same id`)
+
+    const topo = buildScenarioTopology(id)
+    assert.ok(topo.devices.length >= 2, `${id}: too few devices`)
+    assert.ok(topo.links.length >= 1, `${id}: no links`)
+
+    // round-tripping proves the interface indices actually resolve against the
+    // model table; a wrong group declaration shows up here rather than in eNSP
+    const back = parseTopology(serialiseTopology(topo))
+    assert.equal(back.devices.length, topo.devices.length, `${id}: device count changed on reparse`)
+    assert.equal(back.links.length, topo.links.length, `${id}: link count changed on reparse`)
+
+    // Console ports must be distinct or eNSP cannot open them all. PCs carry no
+    // console (eNSP gives them com_port 0), so they are not part of the check.
+    const ports = back.devices.map((d) => d.comPort).filter((p) => p > 0)
+    assert.equal(new Set(ports).size, ports.length, `${id}: duplicate console port`)
+  }
+})
+
+test('blueprint addressing stays inside the documented ranges', async () => {
+  const { LAB_IDS, labAddressing, labDevices } = await import('../src/core/labs.mjs')
+  for (const id of LAB_IDS) {
+    assert.ok(labDevices(id).length >= 2, `${id}: device summary too short`)
+    for (const row of labAddressing(id)) {
+      // both IPv4 (10.0.12.1/24) and IPv6 (2001:db8:12::1/64) appear here
+      assert.match(row.ip, /^[0-9a-fA-F:.]+\/\d+$/, `${id}: bad address "${row.ip}"`)
+    }
+  }
+})
+
+test('device availability is checked before the client is started', async () => {
+  const { probeDevice, checkTopologySupport, describeBlocked, clearCatalogueCache } = await import(
+    '../src/core/compat.mjs'
+  )
+  clearCatalogueCache()
+
+  // Models with no plugin dependency must never be blocked by the probe; a false
+  // positive here would make every ordinary lab unusable.
+  for (const model of ['AR2220', 'S5700', 'AC6005', 'PC']) {
+    assert.equal(probeDevice(model).available, true, `${model} wrongly reported unavailable`)
+  }
+
+  // The report has to name the offending device and say what to do about it.
+  const report = checkTopologySupport({
+    devices: [
+      { name: 'SW1', model: 'S5700' },
+      { name: 'FW1', model: 'USG6000V' },
+      { name: 'FW2', model: 'USG6000V' },
+    ],
+  })
+  assert.equal(report.ok, false)
+  assert.deepEqual(
+    report.blocked.map((b) => b.name).sort(),
+    ['FW1', 'FW2'],
+    'only the firewalls should be blocked',
+  )
+  assert.deepEqual(report.checked, ['S5700', 'USG6000V'])
+
+  // Repeated models collapse into one explanation rather than one line per device.
+  const text = describeBlocked(report)
+  assert.match(text, /USG6000V \(FW1, FW2\)/)
+  assert.match(text, /镜像|组件/)
+  assert.doesNotMatch(text, /cannot start:\s*$/)
+})
+
+test('a fully supported topology passes the availability check', async () => {
+  const { checkTopologySupport } = await import('../src/core/compat.mjs')
+  const { buildScenarioTopology } = await import('../src/core/labs.mjs')
+  const topo = buildScenarioTopology('ospf-single')
+  const report = checkTopologySupport(topo)
+  assert.equal(report.ok, true, `unexpected blockers: ${JSON.stringify(report.blocked)}`)
+  assert.deepEqual(report.blocked, [])
+})
+
+test('a refused click reports the occluding process instead of succeeding', () => {
+  // The bug this guards: a synthetic click lands on whatever window owns the
+  // pixel, so an occluded eNSP received nothing while clickToolbar said ok.
+  // clickToolbar now returns {ok:false, clicked:false, occludedBy} in that case,
+  // and startAllDevices throws rather than waiting on consoles that will never
+  // open. Only the pure shape of that contract is asserted here, because the
+  // real path needs a live eNSP and a second window on top of it.
+  const source = readFileSync(new URL('../src/core/launcher.mjs', import.meta.url), 'utf8')
+  assert.match(source, /WindowFromPoint/, 'the click point owner must be queried')
+  assert.match(source, /GetAncestor/, 'the point must be resolved to its top-level window')
+  assert.match(source, /occludedBy/, 'a blocked click must name the blocking process')
+  assert.match(source, /if \(!click\.clicked\)/, 'startAllDevices must abort when the click was refused')
+})
+
+test('calibration refuses to run on an occluded window', () => {
+  const source = readFileSync(new URL('../src/core/launcher.mjs', import.meta.url), 'utf8')
+  const body = source.slice(source.indexOf('export async function startAllDevices'))
+  assert.match(body, /checkOcclusion\(hwnd\)/, 'the window must be checked for occlusion before calibrating')
+  assert.ok(
+    body.indexOf('checkOcclusion(hwnd)') < body.indexOf('calibrateAnchors(hwnd)'),
+    'the occlusion check must come before calibration reads the screen',
+  )
 })

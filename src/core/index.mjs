@@ -9,16 +9,28 @@
 
 export {
   MODEL_SPECS,
+  MODEL_NAMES,
+  GEOMETRY,
+  ICON,
+  vrpToFlatIndex,
+  flatIndexToVrp,
+  portCount,
+  describePorts,
+} from './models.mjs'
+
+// Kept for consumers written against the old shape; the table behind it was
+// wrong (S3700 as 24 Ethernet ports, AR1220 as 8 GE ports) and has been
+// replaced by the measured one in models.mjs.
+export { MODEL_NAMES as MODELS } from './models.mjs'
+
+export {
   buildTopology,
   autoLayout,
   twoPcLab,
   twoPcLabConfig,
-  vrpToFlatIndex,
 } from './build.mjs'
 
 export {
-  MODELS,
-  GEOMETRY,
   interfaceName,
   interfaceIndex,
   parseTopology,
@@ -27,6 +39,25 @@ export {
   serialiseTopology,
   summarise,
 } from './topology.mjs'
+
+export {
+  LABS,
+  LAB_IDS,
+  hasLab,
+  buildScenarioTopology,
+  labAddressing,
+  labDevices,
+  labModels,
+} from './labs.mjs'
+
+export {
+  probeDevice,
+  checkTopologySupport,
+  describeBlocked,
+  imageNotesFor,
+  IMAGE_NOTES,
+  rootFromExe,
+} from './compat.mjs'
 
 export { ConsoleSession, openConsole, probeConsole, viewOf, hostnameOf } from './console.mjs'
 
@@ -37,6 +68,7 @@ export {
   focusEnsp,
   minimiseEnsp,
   clickToolbar,
+  checkOcclusion,
   waitForConsole,
   startAllDevices,
   stopAllDevices,
