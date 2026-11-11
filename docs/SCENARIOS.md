@@ -39,6 +39,7 @@ ensp up ospf-single.topo
 - 链路：3 条
 
 生成：`ensp preset vlan-access --topo vlan-access.topo`
+- 验收：`ensp verify vlan-access --topology vlan-access.topo`（2 条断言）
 
 ### trunk-interconnect — Trunk 互联与多 VLAN 透传
 
@@ -66,6 +67,7 @@ ensp up ospf-single.topo
 - 链路：3 条
 
 生成：`ensp preset trunk-interconnect --topo trunk-interconnect.topo`
+- 验收：`ensp verify trunk-interconnect --topology trunk-interconnect.topo`（1 条断言）
 
 ### vlanif-routing — VLAN 间路由（三层交换机）
 
@@ -99,6 +101,7 @@ ensp up ospf-single.topo
 | SW2 | Vlanif200 | 10.0.12.2/24 | 互联 VLAN200 |
 
 生成：`ensp preset vlanif-routing --topo vlanif-routing.topo`
+- 验收：`ensp verify vlanif-routing --topology vlanif-routing.topo`（2 条断言）
 
 ### stp-rstp — STP / RSTP 生成树
 
@@ -133,6 +136,7 @@ ensp up ospf-single.topo
 | SW3 | Vlanif10 | 192.168.10.253/24 | 管理地址 |
 
 生成：`ensp preset stp-rstp --topo stp-rstp.topo`
+- 验收：`ensp verify stp-rstp --topology stp-rstp.topo`（2 条断言）
 
 ### link-aggregation — 链路聚合 Eth-Trunk
 
@@ -160,6 +164,7 @@ ensp up ospf-single.topo
 - 链路：4 条
 
 生成：`ensp preset link-aggregation --topo link-aggregation.topo`
+- 验收：`ensp verify link-aggregation --topology link-aggregation.topo`（1 条断言）
 
 ### port-security — 端口安全与 MAC 限制
 
@@ -188,6 +193,7 @@ ensp up ospf-single.topo
 - 链路：2 条
 
 生成：`ensp preset port-security --topo port-security.topo`
+- 验收：`ensp verify port-security --topology port-security.topo`（1 条断言）
 
 ### port-isolation — 端口隔离与 MUX VLAN
 
@@ -216,6 +222,7 @@ ensp up ospf-single.topo
 - 链路：3 条
 
 生成：`ensp preset port-isolation --topo port-isolation.topo`
+- 验收：`ensp verify port-isolation --topology port-isolation.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### super-vlan — VLAN 聚合（Super-VLAN）
 
@@ -250,6 +257,7 @@ ensp up ospf-single.topo
 | SW1 | Vlanif30 | 192.168.30.254/24 | sub-VLAN 30 |
 
 生成：`ensp preset super-vlan --topo super-vlan.topo`
+- 验收：`ensp verify super-vlan --topology super-vlan.topo`（1 条断言）
 
 ### static-route — 静态路由与默认路由
 
@@ -286,6 +294,7 @@ ensp up ospf-single.topo
 | R2 | GigabitEthernet0/0/1 | 192.168.2.254/24 | PC2 网关 |
 
 生成：`ensp preset static-route --topo static-route.topo`
+- 验收：`ensp verify static-route --topology static-route.topo`（1 条断言）
 
 ### rip — RIPv1 / RIPv2
 
@@ -322,6 +331,7 @@ ensp up ospf-single.topo
 | R3 | GigabitEthernet0/0/1 | 192.168.3.254/24 | PC2 网关 |
 
 生成：`ensp preset rip --topo rip.topo`
+- 验收：`ensp verify rip --topology rip.topo`（2 条断言）
 
 ### ospf-single — OSPF 单区域
 
@@ -363,6 +373,7 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 3.3.3.3/32 |  |
 
 生成：`ensp preset ospf-single --topo ospf-single.topo`
+- 验收：`ensp verify ospf-single --topology ospf-single.topo`（2 条断言）
 
 ### dhcp — DHCP 服务（含中继）
 
@@ -396,6 +407,7 @@ ensp up ospf-single.topo
 | R1 | LoopBack0 | 1.1.1.1/32 | router-id |
 
 生成：`ensp preset dhcp --topo dhcp.topo`
+- 验收：`ensp verify dhcp --topology dhcp.topo`（1 条断言）
 
 ### acl-filter — ACL 访问控制
 
@@ -428,6 +440,7 @@ ensp up ospf-single.topo
 | R1 | GigabitEthernet0/0/0 | 192.168.20.253/24 | 同接口从地址 |
 
 生成：`ensp preset acl-filter --topo acl-filter.topo`
+- 验收：`ensp verify acl-filter --topology acl-filter.topo`（1 条断言）
 
 ### aaa-local — 本地 AAA 与设备登录
 
@@ -460,6 +473,7 @@ ensp up ospf-single.topo
 | R1 | GigabitEthernet0/0/1 | 192.168.1.254/24 | 管理网段 |
 
 生成：`ensp preset aaa-local --topo aaa-local.topo`
+- 验收：`ensp verify aaa-local --topology aaa-local.topo`（1 条断言）
 
 ### vrrp-basics — VRRP 网关冗余
 
@@ -500,6 +514,7 @@ ensp up ospf-single.topo
 | SW2 | Vlanif100 | 10.0.100.2/24 | 上行互联 |
 
 生成：`ensp preset vrrp-basics --topo vrrp-basics.topo`
+- 验收：`ensp verify vrrp-basics --topology vrrp-basics.topo`（2 条断言）
 
 ### network-management — 网络管理（SNMP / NTP / Syslog）
 
@@ -537,6 +552,7 @@ ensp up ospf-single.topo
 | SW1 | Vlanif30 | 10.1.30.2/24 | 设备管理地址 |
 
 生成：`ensp preset network-management --topo network-management.topo`
+- 验收：`ensp verify network-management --topology network-management.topo`（1 条断言）
 
 
 ## 进阶
@@ -575,6 +591,7 @@ ensp up ospf-single.topo
 | CORE2 | Vlanif20 | 192.168.20.252/24 | VLAN20 网关（实例2 主） |
 
 生成：`ensp preset mstp-load-balance --topo mstp-load-balance.topo`
+- 验收：`ensp verify mstp-load-balance --topology mstp-load-balance.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### ospf-multi-area — OSPF 多区域与 ABR
 
@@ -613,6 +630,7 @@ ensp up ospf-single.topo
 | R4 | GigabitEthernet0/0/0 | 10.0.24.4/24 | area 2 |
 
 生成：`ensp preset ospf-multi-area --topo ospf-multi-area.topo`
+- 验收：`ensp verify ospf-multi-area --topology ospf-multi-area.topo`（2 条断言）
 
 ### ospf-stub-nssa — OSPF 特殊区域（Stub / NSSA）
 
@@ -649,6 +667,7 @@ ensp up ospf-single.topo
 | R4 | GigabitEthernet0/0/0 | 10.0.14.4/24 | area 2 |
 
 生成：`ensp preset ospf-stub-nssa --topo ospf-stub-nssa.topo`
+- 验收：`ensp verify ospf-stub-nssa --topology ospf-stub-nssa.topo`（2 条断言）
 
 ### ospf-lsa-types — OSPF LSA 类型与区域过滤
 
@@ -696,6 +715,7 @@ ensp up ospf-single.topo
 | R4 | LoopBack0 | 4.4.4.4/32 | ASBR 外部路由 |
 
 生成：`ensp preset ospf-lsa-types --topo ospf-lsa-types.topo`
+- 验收：`ensp verify ospf-lsa-types --topology ospf-lsa-types.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### ospf-virtual-link — OSPF 虚连接
 
@@ -735,6 +755,7 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 3.3.3.3/32 | 虚拟链路的两端 router-id |
 
 生成：`ensp preset ospf-virtual-link --topo ospf-virtual-link.topo`
+- 验收：`ensp verify ospf-virtual-link --topology ospf-virtual-link.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### ospf-troubleshooting — OSPF 邻居排障
 
@@ -777,6 +798,7 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 2.2.2.2/32 |  |
 
 生成：`ensp preset ospf-troubleshooting --topo ospf-troubleshooting.topo`
+- 验收：`ensp verify ospf-troubleshooting --topology ospf-troubleshooting.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### nat — NAT（源 NAT / NAT Server）
 
@@ -812,6 +834,7 @@ ensp up ospf-single.topo
 | ISP | LoopBack0 | 8.8.8.8/32 | 模拟 Internet 目的地址 |
 
 生成：`ensp preset nat --topo nat.topo`
+- 验收：`ensp verify nat --topology nat.topo`（1 条断言）
 
 ### ppp-hdlc — HDLC 与 PPP（含 PPPoE）
 
@@ -847,6 +870,7 @@ ensp up ospf-single.topo
 | R2 | GigabitEthernet0/0/1 | 10.0.13.2/30 |  |
 
 生成：`ensp preset ppp-hdlc --topo ppp-hdlc.topo`
+- 验收：`ensp verify ppp-hdlc --topology ppp-hdlc.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### ipv6 — IPv6 基础与路由
 
@@ -881,6 +905,7 @@ ensp up ospf-single.topo
 | R2 | LoopBack0 | 2001:db8:2::2/128 |  |
 
 生成：`ensp preset ipv6 --topo ipv6.topo`
+- 验收：`ensp verify ipv6 --topology ipv6.topo`（2 条断言）
 
 ### dhcp-snooping — DHCP Snooping 与 IPSG
 
@@ -916,6 +941,7 @@ ensp up ospf-single.topo
 | SW1 | Vlanif10 | 192.168.10.253/24 | 管理地址 |
 
 生成：`ensp preset dhcp-snooping --topo dhcp-snooping.topo`
+- 验收：`ensp verify dhcp-snooping --topology dhcp-snooping.topo`（1 条断言）
 
 ### arp-security — ARP 安全（防欺骗与防攻击）
 
@@ -950,6 +976,7 @@ ensp up ospf-single.topo
 | SW1 | Vlanif10 | 192.168.10.254/24 | 网关兼 DHCP Snooping 设备 |
 
 生成：`ensp preset arp-security --topo arp-security.topo`
+- 验收：`ensp verify arp-security --topology arp-security.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### qos-basics — QoS 分类标记与队列
 
@@ -988,6 +1015,7 @@ ensp up ospf-single.topo
 | R2 | GigabitEthernet0/0/0 | 10.0.12.2/24 |  |
 
 生成：`ensp preset qos-basics --topo qos-basics.topo`
+- 验收：`ensp verify qos-basics --topology qos-basics.topo`（1 条断言）
 
 ### wlan-basic — WLAN（AC + FIT AP）
 
@@ -1021,6 +1049,7 @@ ensp up ospf-single.topo
 | SW1 | Vlanif100 | 192.168.100.254/24 | AP 管理网段 |
 
 生成：`ensp preset wlan-basic --topo wlan-basic.topo`
+- 验收：`ensp verify wlan-basic --topology wlan-basic.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### ospfv3-ipv6 — OSPFv3 与 IPv6 双栈
 
@@ -1061,6 +1090,7 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 2001:db8:3::3/128 | router-id 用 IPv4 地址 |
 
 生成：`ensp preset ospfv3-ipv6 --topo ospfv3-ipv6.topo`
+- 验收：`ensp verify ospfv3-ipv6 --topology ospfv3-ipv6.topo`（1 条断言）
 
 ### isis-multi-level — IS-IS 多级别与默认路由注入
 
@@ -1104,6 +1134,7 @@ ensp up ospf-single.topo
 | R4 | LoopBack0 | 4.4.4.4/32 |  |
 
 生成：`ensp preset isis-multi-level --topo isis-multi-level.topo`
+- 验收：`ensp verify isis-multi-level --topology isis-multi-level.topo`（2 条断言）
 
 
 ## 高级
@@ -1145,6 +1176,7 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 3.3.3.3/32 | AS 200 业务网段 |
 
 生成：`ensp preset bgp-ebgp-ibgp --topo bgp-ebgp-ibgp.topo`
+- 验收：`ensp verify bgp-ebgp-ibgp --topology bgp-ebgp-ibgp.topo`（2 条断言）
 
 ### bgp-attributes — BGP 选路属性
 
@@ -1187,6 +1219,7 @@ ensp up ospf-single.topo
 | R4 | GigabitEthernet0/0/1 | 10.0.34.4/24 |  |
 
 生成：`ensp preset bgp-attributes --topo bgp-attributes.topo`
+- 验收：`ensp verify bgp-attributes --topology bgp-attributes.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### bgp-aggregation — BGP 路由聚合与团体属性
 
@@ -1229,6 +1262,7 @@ ensp up ospf-single.topo
 | R1 | LoopBack2 | 10.10.3.1/24 | 聚合前明细 3 |
 
 生成：`ensp preset bgp-aggregation --topo bgp-aggregation.topo`
+- 验收：`ensp verify bgp-aggregation --topology bgp-aggregation.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### bgp-troubleshooting — BGP 邻居排障
 
@@ -1270,6 +1304,7 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 3.3.3.3/32 |  |
 
 生成：`ensp preset bgp-troubleshooting --topo bgp-troubleshooting.topo`
+- 验收：`ensp verify bgp-troubleshooting --topology bgp-troubleshooting.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### stack-istack — 交换机堆叠与 iStack
 
@@ -1309,6 +1344,7 @@ ensp up ospf-single.topo
 | SW3 | Vlanif10 | 192.168.10.253/24 | 接入设备 |
 
 生成：`ensp preset stack-istack --topo stack-istack.topo`
+- 验收：`ensp verify stack-istack --topology stack-istack.topo`（1 条断言）
 
 ### route-policy-pbr — 路由策略与策略路由
 
@@ -1351,6 +1387,7 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 2.2.2.2/32 | 与出口 1 相同的地址，用于观察选路 |
 
 生成：`ensp preset route-policy-pbr --topo route-policy-pbr.topo`
+- 验收：`ensp verify route-policy-pbr --topology route-policy-pbr.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### bgp-route-reflector — BGP 路由反射器与联盟
 
@@ -1388,6 +1425,7 @@ ensp up ospf-single.topo
 | EXT | GigabitEthernet0/0/0 | 10.1.24.4/24 | AS 200 |
 
 生成：`ensp preset bgp-route-reflector --topo bgp-route-reflector.topo`
+- 验收：`ensp verify bgp-route-reflector --topology bgp-route-reflector.topo`（2 条断言）
 
 ### ipsec-vpn — IPsec VPN
 
@@ -1424,6 +1462,7 @@ ensp up ospf-single.topo
 | R2 | GigabitEthernet0/0/1 | 192.168.2.254/24 | 私网侧 |
 
 生成：`ensp preset ipsec-vpn --topo ipsec-vpn.topo`
+- 验收：`ensp verify ipsec-vpn --topology ipsec-vpn.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### multicast-pim-sm — 组播 PIM-SM 与 IGMP
 
@@ -1469,6 +1508,7 @@ ensp up ospf-single.topo
 | R3 | GigabitEthernet0/0/1 | 192.168.3.254/24 | 接收者网段 |
 
 生成：`ensp preset multicast-pim-sm --topo multicast-pim-sm.topo`
+- 验收：`ensp verify multicast-pim-sm --topology multicast-pim-sm.topo`（2 条断言）
 
 ### firewall-zones — 防火墙安全域与策略
 
@@ -1508,9 +1548,10 @@ ensp up ospf-single.topo
 | R-UNTRUST | GigabitEthernet0/0/0 | 200.1.1.2/24 | 外网侧 |
 | FW1 | GigabitEthernet1/0/2 | 10.1.40.1/24 | dmz 区域 |
 | SRV1 | Ethernet0/0/1 | 10.1.40.10/24 | 对外发布的服务器 |
+- 设备镜像：USG6000V 需要 eNSP 安装时勾选 USG6000V 组件（NGFW 镜像，约 1 GB）。缺镜像时 eNSP 会打开拓扑后自行退出，`ensp up` 会在启动前直接报错说明缺什么。
 
 生成：`ensp preset firewall-zones --topo firewall-zones.topo`
-- 设备镜像：USG6000V 需要 eNSP 安装时勾选 USG6000V 组件（NGFW 镜像，约 1 GB）。缺镜像时 eNSP 会打开拓扑后自行退出，`ensp up` 会在启动前直接报错说明缺什么。
+- 验收：`ensp verify firewall-zones --topology firewall-zones.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### bfd-fast-convergence — BFD 快速故障检测
 
@@ -1553,6 +1594,7 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 3.3.3.3/32 |  |
 
 生成：`ensp preset bfd-fast-convergence --topo bfd-fast-convergence.topo`
+- 验收：`ensp verify bfd-fast-convergence --topology bfd-fast-convergence.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### mpls-basic — MPLS 标签转发
 
@@ -1597,6 +1639,7 @@ ensp up ospf-single.topo
 | R4 | GigabitEthernet0/0/0 | 10.0.34.4/24 |  |
 
 生成：`ensp preset mpls-basic --topo mpls-basic.topo`
+- 验收：`ensp verify mpls-basic --topology mpls-basic.topo`（2 条断言）
 
 ### mpls-l3vpn — BGP/MPLS L3VPN
 
@@ -1643,6 +1686,7 @@ ensp up ospf-single.topo
 | CE2 | GigabitEthernet0/0/0 | 192.168.1.20/24 |  |
 
 生成：`ensp preset mpls-l3vpn --topo mpls-l3vpn.topo`
+- 验收：`ensp verify mpls-l3vpn --topology mpls-l3vpn.topo`（2 条断言）
 
 ### dual-homed-isp — 双出口多运营商选路
 
@@ -1683,6 +1727,7 @@ ensp up ospf-single.topo
 | ISP1 | LoopBack0 | 8.8.8.8/32 | 仅 ISP1 宣告，用于观察回程选路 |
 
 生成：`ensp preset dual-homed-isp --topo dual-homed-isp.topo`
+- 验收：`ensp verify dual-homed-isp --topology dual-homed-isp.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### firewall-hrp — 防火墙双机热备（HRP）
 
@@ -1726,9 +1771,10 @@ ensp up ospf-single.topo
 | FW2 | GigabitEthernet1/0/2 | 10.1.252.2/24 |  |
 | R-UP | GigabitEthernet0/0/0 | 10.1.250.10/24 | 外网侧 |
 | R-DOWN | GigabitEthernet0/0/0 | 10.1.249.10/24 | 内网侧 |
+- 设备镜像：USG6000V 需要 eNSP 安装时勾选 USG6000V 组件（NGFW 镜像，约 1 GB）。缺镜像时 eNSP 会打开拓扑后自行退出，`ensp up` 会在启动前直接报错说明缺什么。
 
 生成：`ensp preset firewall-hrp --topo firewall-hrp.topo`
-- 设备镜像：USG6000V 需要 eNSP 安装时勾选 USG6000V 组件（NGFW 镜像，约 1 GB）。缺镜像时 eNSP 会打开拓扑后自行退出，`ensp up` 会在启动前直接报错说明缺什么。
+- 验收：`ensp verify firewall-hrp --topology firewall-hrp.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### spine-leaf-vxlan — Spine-Leaf 与 VXLAN 大二层
 
@@ -1771,6 +1817,7 @@ ensp up ospf-single.topo
 | LEAF2 | Vlanif10 | 192.168.10.253/24 |  |
 
 生成：`ensp preset spine-leaf-vxlan --topo spine-leaf-vxlan.topo`
+- 验收：`ensp verify spine-leaf-vxlan --topology spine-leaf-vxlan.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### ipsec-gre-tunnel — IPsec 与 GRE 隧道组合
 
@@ -1812,6 +1859,7 @@ ensp up ospf-single.topo
 | R2 | Tunnel0/0/0 | 10.1.1.2/24 |  |
 
 生成：`ensp preset ipsec-gre-tunnel --topo ipsec-gre-tunnel.topo`
+- 验收：`ensp verify ipsec-gre-tunnel --topology ipsec-gre-tunnel.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### wlan-roaming — WLAN 漫游与 AC 高可用
 
@@ -1850,6 +1898,7 @@ ensp up ospf-single.topo
 | SW2 | Vlanif100 | 192.168.100.253/24 |  |
 
 生成：`ensp preset wlan-roaming --topo wlan-roaming.topo`
+- 验收：`ensp verify wlan-roaming --topology wlan-roaming.topo`（无专门断言，逐条跑本场景的验证命令）
 
 ### campus-network — 园区网综合（双核心 + 接入 + 出口）
 
@@ -1897,6 +1946,7 @@ ensp up ospf-single.topo
 | FW1 | GigabitEthernet1/0/1 | 10.1.250.254/24 | untrust 区域 |
 | FW1 | GigabitEthernet1/0/2 | 10.1.40.1/24 | dmz 区域 |
 | SRV1 | Ethernet0/0/1 | 10.1.40.10/24 | 对外发布服务器 |
+- 设备镜像：USG6000V 需要 eNSP 安装时勾选 USG6000V 组件（NGFW 镜像，约 1 GB）。缺镜像时 eNSP 会打开拓扑后自行退出，`ensp up` 会在启动前直接报错说明缺什么。
 
 生成：`ensp preset campus-network --topo campus-network.topo`
-- 设备镜像：USG6000V 需要 eNSP 安装时勾选 USG6000V 组件（NGFW 镜像，约 1 GB）。缺镜像时 eNSP 会打开拓扑后自行退出，`ensp up` 会在启动前直接报错说明缺什么。
+- 验收：`ensp verify campus-network --topology campus-network.topo`（无专门断言，逐条跑本场景的验证命令）

@@ -38,6 +38,8 @@ import {
   waitForConsole,
 } from '../core/launcher.mjs'
 import { calibrateAnchors, inspectAnchors, DEFAULT_ANCHORS } from '../core/calibrate.mjs'
+import { doctor, modelsOf } from '../core/doctor.mjs'
+import { runAcceptance, hasChecks, EXPECTATIONS } from '../core/acceptance.mjs'
 import { pushConfig, pushConfigMany, queryDevice } from '../core/provision.mjs'
 import { SCENARIOS, SCENARIO_IDS, byLevel, renderScenario, searchScenarios } from '../core/presets.mjs'
 import { PACKAGE_NAME, VERSION } from '../core/version.mjs'
@@ -327,8 +329,48 @@ const TOOLS = [
         brief: renderScenario(id),
         data: SCENARIOS[id],
         hasTopology: hasLab(id),
+        hasCuratedChecks: hasChecks(id),
         ...(hasLab(id) ? { devices: labDevices(id), addressing: labAddressing(id) } : {}),
       }
+    },
+  },
+  {
+    name: 'ensp_doctor',
+    description:
+      'Check whether this machine can actually run a lab, before starting anything. ' +
+      'Reports eNSP and VirtualBox presence, missing device images, console ports already in ' +
+      'use, free memory, and — most importantly — whether synthetic mouse input reaches this ' +
+      'session at all. Every failing check comes with the fix. Never starts eNSP.',
+    inputSchema: obj({
+      topology: { type: 'string', description: 'optional .topo path, so device images can be checked' },
+      deep: { type: 'boolean', description: 'run the slow input-injection probe (default true)' },
+    }),
+    async run({ topology, deep }) {
+      let models
+      if (topology) models = modelsOf(await readTopology(topology))
+      return doctor({ models, deep: deep !== false })
+    },
+  },
+  {
+    name: 'ensp_verify',
+    description:
+      'Run a scenario\'s acceptance checks against a lab that is already running. Curated ' +
+      'scenarios assert on what each device reports (OSPF Full, BGP Established, VRRP Master); ' +
+      'the rest smoke-test every verification command from the scenario. Use this to decide ' +
+      'whether the lab works, not just whether configuration was sent.',
+    inputSchema: obj({
+      scenario: { type: 'string', description: 'scenario id, e.g. "ospf-single"' },
+      topology: { type: 'string', description: 'the .topo file that is running (for console ports)' },
+      timeout: { type: 'number', description: 'per-command timeout in ms (default 25000)' },
+      wait: {
+        type: 'number',
+        description: 'how long a failing assertion may keep being retried, in ms (default 60000)',
+      },
+    }),
+    async run({ scenario, topology, timeout, wait }) {
+      if (!scenario) throw new Error('scenario is required')
+      if (!topology) throw new Error('topology is required: pass the .topo file that is running')
+      return runAcceptance({ id: scenario, topology, timeoutMs: timeout, waitMs: wait })
     },
   },
   {

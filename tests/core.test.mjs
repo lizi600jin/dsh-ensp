@@ -198,7 +198,7 @@ test('DSH tool definitions satisfy the harness schema contract', async () => {
   const plugin = await import('../src/dsh/index.mjs')
   plugin.apply(ctx)
 
-  assert.equal(registered.length, 12, 'expected 12 tools')
+  assert.equal(registered.length, 14, 'expected 14 tools')
 
   const violations = (node, path = 's') => {
     const bad = []
@@ -408,4 +408,130 @@ test('calibration refuses to run on an occluded window', () => {
     body.indexOf('checkOcclusion(hwnd)') < body.indexOf('calibrateAnchors(hwnd)'),
     'the occlusion check must come before calibration reads the screen',
   )
+})
+
+test('acceptance assertions actually distinguish pass from fail', async () => {
+  // A verification layer that passes everything is worse than none, so pin the
+  // judgement itself: a real `display ospf peer brief` must pass, a session that
+  // never reached Full must fail, and a silent command must not be mistaken for
+  // success.
+  const { evaluateAssertion } = await import('../src/core/acceptance.mjs')
+  const full = [
+    'Area Id           Interface                Neighbor id      State',
+    '0.0.0.0           GigabitEthernet0/0/0     2.2.2.2          Full',
+  ].join('\n')
+  const stuck = [
+    'Area Id           Interface                Neighbor id      State',
+    '0.0.0.0           GigabitEthernet0/0/0     2.2.2.2          ExStart',
+  ].join('\n')
+
+  assert.equal(evaluateAssertion(full, { contains: 'Full' }).pass, true)
+  assert.equal(evaluateAssertion(stuck, { contains: 'Full' }).pass, false)
+  assert.equal(evaluateAssertion('', { minLines: 2 }).pass, false)
+  assert.equal(evaluateAssertion(full, { notContains: 'ExStart' }).pass, true)
+  assert.equal(evaluateAssertion(full, { matches: /Full\s*$/m }).pass, true)
+  assert.match(evaluateAssertion(stuck, { contains: 'Full' }).why, /Full/)
+})
+
+test('every scenario gets a verification plan, curated or smoke', async () => {
+  // planFor must never return nothing: a scenario without hand-written asserts
+  // falls back to the commands its own steps already name.
+  const { planFor, hasChecks, EXPECTATIONS } = await import('../src/core/acceptance.mjs')
+  const { SCENARIO_IDS } = await import('../src/core/presets.mjs')
+
+  const curated = SCENARIO_IDS.filter((id) => hasChecks(id))
+  assert.ok(curated.length >= 20, `expected curated checks for many scenarios, got ${curated.length}`)
+
+  for (const id of SCENARIO_IDS) {
+    const plan = planFor(id)
+    assert.ok(plan.checks.length > 0, `${id}: plan must contain at least one check`)
+    for (const check of plan.checks) {
+      assert.ok(check.command, `${id}: check needs a command`)
+      assert.ok(check.on, `${id}: check needs a target device`)
+      assert.equal(check.kind, hasChecks(id) ? 'assert' : 'smoke', `${id}: wrong check kind`)
+    }
+  }
+  for (const [id, checks] of Object.entries(EXPECTATIONS)) {
+    assert.ok(SCENARIO_IDS.includes(id), `${id}: curated checks for unknown scenario`)
+    assert.ok(checks.length > 0, `${id}: curated list must not be empty`)
+  }
+})
+
+test('doctor reports a fix for every failing check', async () => {
+  // The whole point of doctor is to say what to do next, so a check without a
+  // fix (or a good reason) is a dead end for the user.
+  const { doctor, formatDoctor } = await import('../src/core/doctor.mjs')
+  const report = doctor({ deep: false, models: ['AR2220', 'USG6000V'] })
+
+  assert.ok(Array.isArray(report.checks) && report.checks.length >= 6)
+  for (const check of report.checks) {
+    assert.ok(['pass', 'warn', 'fail'].includes(check.status), `${check.id}: bad status`)
+    assert.ok(check.detail, `${check.id}: needs a detail line`)
+    if (check.status !== 'pass') assert.ok(check.fix, `${check.id}: a non-passing check needs a fix`)
+  }
+  // USG6000V has no image on a stock install, so it must be called out.
+  const images = report.checks.find((c) => c.id === 'device-images')
+  assert.ok(images, 'device images must be checked when models are supplied')
+  assert.match(formatDoctor(report), /device-images/i)
+})
+
+test('an unreachable console is reported as such, not as a failed assertion', async () => {
+  // Real failure in the first version: verify pointed at a topology whose devices
+  // were never started, and reported "not contains Full" on every check. That sends
+  // the reader into OSPF while the actual problem is that nothing is listening.
+  const source = readFileSync(new URL('../src/core/acceptance.mjs', import.meta.url), 'utf8')
+  assert.match(source, /res\?\.ok === false/, 'queryDevice ok:false must be detected')
+  assert.match(source, /console unreachable/, 'that case must be named in the verdict')
+})
+
+test('a converging lab passes instead of being reported as broken', async () => {
+  // Second real failure, seen against a live three-router lab: `ensp apply` returns
+  // before OSPF converges, so a single snapshot said "not contains Full" for a
+  // neighbour that reached Full ten seconds later. The assertion itself has to be
+  // retried; a command VRP rejected and a console that never answered are not
+  // retryable, because waiting cannot fix either.
+  const { runAcceptance } = await import('../src/core/acceptance.mjs')
+  let calls = 0
+  const report = await runAcceptance({
+    id: 'ospf-single',
+    ports: new Map([['R1', 2000]]),
+    waitMs: 900,
+    intervalMs: 100,
+    query: async ({ command }) => {
+      calls++
+      // ospf-single asserts on two commands: the peer state and the OSPF routes.
+      if (/peer/i.test(command)) {
+        return calls >= 3
+          ? { ok: true, output: 'Neighbor id 2.2.2.2 State Full' }
+          : { ok: true, output: 'Neighbor id 2.2.2.2 State 2-Way' }
+      }
+      return calls >= 3
+        ? { ok: true, output: 'Destination/Mask Proto Pre Cost NextHop Interface\n2.2.2.2/32 OSPF 10 1 10.0.12.2 GE0/0/0' }
+        : { ok: true, output: 'Route Flags: R - relay' }
+    },
+  })
+  assert.equal(report.ok, true, 'a neighbour that reaches Full must not be reported as broken')
+  assert.equal(report.results[0].pass, true)
+  assert.ok(report.results[0].waitedMs > 0, 'the passing check must record that it had to wait')
+  assert.ok(calls >= 3, 'the assertion must have been retried')
+})
+
+test('a rejected command is not retried', async () => {
+  const { runAcceptance } = await import('../src/core/acceptance.mjs')
+  let calls = 0
+  const report = await runAcceptance({
+    id: 'ospf-single',
+    ports: new Map([['R1', 2000]]),
+    waitMs: 900,
+    intervalMs: 100,
+    query: async () => {
+      calls++
+      return { ok: true, output: "Error: Unrecognized command found at '^' position." }
+    },
+  })
+  assert.equal(report.ok, false)
+  // One query per check and no retries: waiting cannot turn a rejected command
+  // into a passing one, so a rejected command must not enter the retry loop.
+  assert.equal(calls, report.results.length, 'a rejected command must not be retried')
+  assert.match(report.results[0].why, /rejected/)
 })

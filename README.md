@@ -159,7 +159,59 @@ Bring eNSP to the front (restore it from the taskbar) and try again.
 
 还有一点：**不要用管理员身份运行本工具**。提权只让 `PrintWindow` 能拍到画布，点击照样进不去，还多过一次 UAC。
 
-Windows 不允许一个进程把别人的窗口提到前台，`SetWindowPos`/`ShowWindow`/`BringWindowToTop` 全返回 `ERROR_ACCESS_DENIED`，所以这里没有自动修复，只能由人把 eNSP 放到最上层。细节与实测记录见 [docs/UI-ANCHORS.md](docs/UI-ANCHORS.md)。
+还有一种情况既不是遮挡也不是坐标：某些执行上下文（服务、计划任务、SSH 会话、agent 沙箱）根本没有输入注入能力。`SendInput` 会被接受并返回成功，但 `GetLastInputInfo` 的 tick 不动，窗口一个事件都收不到。`ensp doctor` 会实测这一点，见下节。
+
+### 排错自检
+
+启动失败时最费时间的不是修，而是判断该修哪里。`ensp doctor` 把“这台机器能不能跑起来”拆成七项逐条检查，每一项都能独立判定，失败时给一句能照做的修法：
+
+```console
+$ ensp doctor --topology lab.topo
+[ok  ] ensp-installed: E:\Huawei\eNSP\eNSP_Client.exe
+[ok  ] virtualbox: E:\VirtualBox\VBoxManage.exe
+[ok  ] console-ports: 2000-2100 free
+[warn] memory: 949 MB free (each router needs ~256 MB)
+       fix: Close some applications; devices may boot very slowly or fail to start.
+[ok  ] device-images: AR2220 available
+[FAIL] input-injection: SendInput accepted 2 event(s) but the session last-input tick did not change (session 1, console session 1)
+       fix: This session cannot deliver mouse input, so the eNSP toolbar button can never be
+            pressed. Run the tool from an interactive desktop session ...
+[ok  ] anchors: start (987,226) stop (1049,228)
+```
+
+它不启动 eNSP，只读本机文件并做一次合成输入探测，所以可以在任何失败之后、任何操作之前随手跑。`--shallow` 跳过较慢的输入探测，`--json` 输出完整结构。对应的工具是 `ensp_doctor`。
+
+判断顺序是固定的：exe 在不在 → VirtualBox 在不在 → 这个拓扑要的镜像齐不齐 → 控制台端口空不空 → 输入能不能进去 → 内存够不够 → 锚点合不合理。卡在哪一项，就只修那一项。
+
+### 验收
+
+配置下发成功不等于实验成功。`ensp_verify` 读 `.topo` 拿到每台设备的控制台端口，逐条执行该场景的验收命令，按输出内容判定，而不是看命令有没有报错：
+
+```console
+$ ensp verify ospf-single --topology lab.topo
+ospf-single — 单区域 OSPF
+(curated checks)
+[pass] neighbour-full on R1: display ospf peer brief
+[pass] ospf-route on R1: display ip routing-table protocol ospf
+
+accepted: 2/2 checks passed
+```
+
+约 30 个场景有专门写的断言（OSPF 要 `Full`、BGP 要 `Established`、VRRP 要有 `Master`/`Backup`、MPLS VPN 要有 `Established` 与 VPN 路由表），其余场景回退成“把场景里提到的验证命令都跑一遍”的冒烟检查。判定逻辑在 `src/core/acceptance.mjs` 的 `EXPECTATIONS`，断言支持 `contains`、`notContains`、`matches`、`minLines`。对应的工具是 `ensp_verify`，`ensp_scenario` 会告诉某个场景有没有专门断言。
+
+断言不通过时会自己重试，因为路由协议是在命令返回之后才收敛的。`ensp apply` 一结束就验收，OSPF 邻居通常还在 `ExStart` 或 `2-Way`，只取一次快照会把它报成坏的实验。默认给 60 秒（`--wait` 改），通过时会注明等了多久：
+
+```console
+$ ensp verify ospf-single --topology lab.topo
+  checking neighbour-full on R1
+  waiting 3s for neighbour-full on R1 (not contains "Full")
+  ...
+[pass] neighbour-full on R1: display ospf peer brief (converged after 27s)
+```
+
+两类失败不进重试循环，因为等下去也不会变好：控制台连不上（设备没启动）和 VRP 拒绝命令（命令写错）。前者直接说 `console unreachable: ... ECONNREFUSED`，后者说 `VRP rejected the command`，都不会伪装成“断言不符”。
+
+用法上先 `doctor` 再 `up` 再 `verify`：doctor 回答环境行不行，up 回答设备起没起，verify 回答网络通不通。
 
 ## 安装
 
@@ -191,7 +243,7 @@ ensp status
 }
 ```
 
-提供 12 个工具：`ensp_status`、`ensp_build_topology`、`ensp_open`、`ensp_start`、`ensp_stop`、`ensp_apply`、`ensp_apply_dir`、`ensp_query`、`ensp_probe`、`ensp_scenarios`、`ensp_scenario`、`ensp_preset_config`。
+提供 14 个工具：`ensp_status`、`ensp_build_topology`、`ensp_open`、`ensp_start`、`ensp_stop`、`ensp_apply`、`ensp_apply_dir`、`ensp_query`、`ensp_probe`、`ensp_doctor`、`ensp_verify`、`ensp_scenarios`、`ensp_scenario`、`ensp_preset_config`。
 
 ## 环境要求
 
@@ -207,15 +259,12 @@ ensp status
 ## 快速开始
 
 ```bash
-ensp preset vlan-access          # 查看场景方向
-
-node -e "import('dsh-ensp').then(async m => {
-  await m.writeTopology('lab.topo', m.twoPcLab())
-})"
-
+ensp doctor                      # 先确认这台机器能跑起来
+ensp preset ospf-single --topo lab.topo   # 生成拓扑
 ensp up lab.topo                 # 启动设备
-ensp status --topology lab.topo  # 查看控制台状态
 ensp apply ./configs --topology lab.topo --save
+ensp verify ospf-single --topology lab.topo   # 按场景断言验收
+ensp stop
 ```
 
 一次两级 OSPF 实验的完整耗时（本机实测，Windows 11、i5、系统缩放 150%）：

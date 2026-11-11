@@ -100,6 +100,7 @@ public class EnspWin {
   [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
@@ -110,6 +111,8 @@ public class EnspWin {
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
   [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint flags);
+
+  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr wp, IntPtr lp);
 
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
@@ -162,13 +165,31 @@ public class EnspWin {
     return found != IntPtr.Zero ? found : fallback;
   }
 
+  private const uint WM_SYSCOMMAND = 0x0112;
+  private const int SC_RESTORE = 0xF120;
+
+  /**
+   * Bring a minimised window back to its normal size.
+   *
+   * ShowWindow(h, SW_RESTORE) reports failure on this MFC frame and leaves the
+   * window at its icon size (measured: 237x39 at -32000,-32000), so every later
+   * screenshot is taken on the icon and calibration finds no toolbar. The
+   * WM_SYSCOMMAND/SC_RESTORE path is what the system menu itself uses and it does
+   * restore the frame to 1280x800.
+   */
+  public static void RestoreWindow(IntPtr h) {
+    if (!IsIconic(h)) return;
+    ShowWindow(h, 9);                                   // best effort, may report false
+    SendMessage(h, WM_SYSCOMMAND, (IntPtr)SC_RESTORE, IntPtr.Zero);
+  }
+
   public static bool FocusWindow(IntPtr h) {
+    RestoreWindow(h);
     IntPtr fg = GetForegroundWindow();
     uint dummy;
     uint fgt = GetWindowThreadProcessId(fg, out dummy);
     uint myt = GetCurrentThreadId();
     AttachThreadInput(myt, fgt, true);
-    ShowWindow(h, 9);            // SW_RESTORE
     BringWindowToTop(h);
     bool ok = SetForegroundWindow(h);
     AttachThreadInput(myt, fgt, false);

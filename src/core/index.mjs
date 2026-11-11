@@ -59,6 +59,29 @@ export {
   rootFromExe,
 } from './compat.mjs'
 
+export {
+  doctor,
+  formatDoctor,
+  checkEnvironment,
+  probeInputInjection,
+  freeMemoryMb,
+  busyConsolePorts,
+  modelsOf,
+  DEFAULT_ENSP_EXE,
+  DEFAULT_VBOX,
+  MIN_FREE_MEMORY_MB,
+} from './doctor.mjs'
+
+export {
+  EXPECTATIONS,
+  evaluateAssertion,
+  planFor,
+  hasChecks,
+  consolePorts,
+  runAcceptance,
+  formatAcceptance,
+} from './acceptance.mjs'
+
 export { ConsoleSession, openConsole, probeConsole, viewOf, hostnameOf } from './console.mjs'
 
 export {

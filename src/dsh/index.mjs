@@ -46,6 +46,8 @@ import {
 import { calibrateAnchors, inspectAnchors } from '../core/calibrate.mjs'
 import { pushConfig, pushConfigMany, queryDevice } from '../core/provision.mjs'
 import { SCENARIOS, SCENARIO_IDS, renderScenario, searchScenarios, byLevel } from '../core/presets.mjs'
+import { doctor, modelsOf } from '../core/doctor.mjs'
+import { runAcceptance, hasChecks } from '../core/acceptance.mjs'
 import { VERSION } from '../core/version.mjs'
 
 /** Declared hard dependency: the tool registry. */
@@ -550,7 +552,14 @@ export function apply(ctx) {
       const brief = hasLab(id)
         ? renderScenario(id) + `\n\n可生成拓扑: ensp_build_topology { path: "${id}.topo", scenario: "${id}" }`
         : renderScenario(id)
-      return { id, brief }
+      return {
+        id,
+        brief:
+          brief +
+          (hasChecks(id)
+            ? `\n\n验收: ensp_verify { scenario: "${id}", topology: "${id}.topo" }`
+            : '\n\n验收: 无专门断言，ensp_verify 会逐条跑场景里的验证命令'),
+      }
     },
   })
 
@@ -612,6 +621,101 @@ export function apply(ctx) {
           `green (${r.green.length}): ` + r.green.map((c) => `${c.x},${c.y} ${c.w}x${c.h}`).join(' | '),
           `red   (${r.red.length}): ` + r.red.map((c) => `${c.x},${c.y} ${c.w}x${c.h}`).join(' | '),
         ].join('\n'),
+      }
+    },
+  })
+
+  /* ----------------------------------------------------------------- doctor */
+
+  add(tools, {
+    name: 'ensp_doctor',
+    description:
+      'Check whether this machine can actually run a lab before starting anything: eNSP and '
+      + 'VirtualBox presence, missing device images, console ports already in use, free memory, and '
+      + 'whether synthetic mouse input reaches this session at all. Every failing check comes with a '
+      + 'fix. Never starts eNSP, so it is safe to run first.',
+    parameters: {
+      topology: str('optional .topo path, so the device images it needs can be checked'),
+      deep: bool('run the slow input-injection probe (default true)'),
+    },
+    output: {
+      schema: obj({
+        ok: req(bool()),
+        failed: req(str()),
+        warned: req(str()),
+        checks: req(str()),
+        error: req(str()),
+      }),
+      render(args, value) {
+        if (value.error) return text(value.error)
+        return text(value.checks + '\n\n' + (value.ok ? 'environment ok' : 'environment NOT ready'))
+      },
+    },
+    async execute({ topology, deep }) {
+      let models
+      if (topology) models = modelsOf(await readTopology(path.resolve(topology)))
+      const report = doctor({ models, deep: deep !== false })
+      const lines = report.checks.map((c) => {
+        const tag = c.status === 'pass' ? '[ok  ]' : c.status === 'warn' ? '[warn]' : '[FAIL]'
+        return `${tag} ${c.id}: ${c.detail}` + (c.fix ? `\n       fix: ${c.fix}` : '')
+      })
+      return {
+        ok: report.ok,
+        failed: report.failed.join(', ') || '(none)',
+        warned: report.warned.join(', ') || '(none)',
+        checks: lines.join('\n'),
+      }
+    },
+  })
+
+  /* ----------------------------------------------------------------- verify */
+
+  add(tools, {
+    name: 'ensp_verify',
+    description:
+      'Run a scenario\'s acceptance checks against a lab that is already running. Curated scenarios '
+      + 'assert on what each device reports (OSPF Full, BGP Established, VRRP Master); the rest '
+      + 'smoke-test every verification command in the scenario. Use this to decide whether the lab '
+      + 'works, rather than whether configuration was merely sent.',
+    parameters: {
+      scenario: str('scenario id, e.g. "ospf-single"'),
+      topology: str('the .topo file that is running, used for console ports'),
+      timeout: num('per-command timeout in ms (default 25000)'),
+      wait: num('how long a failing assertion may keep being retried, in ms (default 60000)'),
+    },
+    output: {
+      schema: obj({
+        scenario: req(str()),
+        ok: req(bool()),
+        summary: req(str()),
+        detail: req(str()),
+        error: req(str()),
+      }),
+      render(args, value) {
+        if (value.error) return text(value.error)
+        return text(`${value.scenario} · ${value.summary}\n\n${value.detail}`)
+      },
+    },
+    async execute({ scenario, topology, timeout, wait }) {
+      if (!scenario) throw new Error('scenario is required')
+      if (!topology) throw new Error('topology is required: pass the .topo file that is running')
+      const report = await runAcceptance({
+        id: scenario,
+        topology: path.resolve(topology),
+        timeoutMs: timeout,
+        waitMs: wait,
+      })
+      const detail = report.results
+        .map((r) => {
+          const waited = r.pass && r.waitedMs ? ` (converged after ${Math.round(r.waitedMs / 1000)}s)` : ''
+          return `${r.pass ? 'PASS' : 'FAIL'} ${r.device} · ${r.id}${waited} — ${r.why}`
+        })
+        .join('\n')
+      return {
+        scenario: report.scenario,
+        ok: report.ok,
+        summary: `${report.passed}/${report.total} checks passed (${report.source})`,
+        detail,
       }
     },
   })

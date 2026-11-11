@@ -31,6 +31,8 @@ import {
   waitForConsole,
 } from '../core/launcher.mjs'
 import { calibrateAnchors, inspectAnchors, DEFAULT_ANCHORS } from '../core/calibrate.mjs'
+import { doctor, formatDoctor, modelsOf } from '../core/doctor.mjs'
+import { runAcceptance, formatAcceptance, hasChecks, planFor } from '../core/acceptance.mjs'
 import { pushConfig } from '../core/provision.mjs'
 import { SCENARIOS, SCENARIO_IDS, byLevel, renderScenario, searchScenarios } from '../core/presets.mjs'
 import {
@@ -58,6 +60,8 @@ ${C.bold('USAGE')}
   ensp up      <topology.topo> [--stop] [--keep-window]
   ensp apply   <config-dir> --topology <topology.topo> [--save] [--device NAME]
   ensp status  [--topology <topology.topo>]
+  ensp doctor  [--topology <topology.topo>] [--json] [--shallow]
+  ensp verify  <scenario-id> --topology <topology.topo> [--json] [--wait MS]
   ensp probe   [--json]
   ensp stop    [--topology <topology.topo>]
   ensp preset  [<id>] [--search <keyword>] [--topo <out.topo>] [--json]
@@ -69,12 +73,17 @@ ${C.bold('OPTIONS')}
   --save            run "save" on each device after its configuration
   --device NAME     apply only to one device
   --timeout MS      per-device readiness timeout (default 240000)
+  --wait MS         verify: how long a failing assertion may keep being retried (default 60000)
   --topo PATH       write the scenario's topology blueprint to a .topo file
+  --topology PATH   the .topo file that is running (doctor, verify)
+  --shallow         doctor: skip the input-injection probe
   --json            machine-readable output
   -h, --help        show this help
 
 ${C.bold('EXAMPLES')}
   ensp up lab.topo
+  ensp doctor --topology lab.topo
+  ensp verify ospf-single --topology lab.topo
   ensp apply ./configs --topology lab.topo --save
   ensp status --topology lab.topo
   ensp probe
@@ -86,8 +95,10 @@ ${C.bold('EXAMPLES')}
 ${C.bold('NOTES')}
   · eNSP must be installed and runnable; it requires administrator rights.
   · Starting devices briefly focuses the eNSP window (it has to be clicked),
-    then the window is minimised again.
+    then the window is minimised again. Run doctor first if a start does nothing.
   · Readiness is verified per device by polling its console, never by sleeping.
+  · Verification is separate from configuration: ensp verify asserts on what
+    each device actually reports.
 `
 
 /** Parse argv into { verb, positional, flags }. */
@@ -145,7 +156,9 @@ function deviceLine(event) {
 
 // --------------------------------------------------------------------------- up
 async function cmdUp({ positional, flags }) {
-  const topoPath = positional[0]
+  // `ensp stop --topology x.topo` is documented in the help text, so accept the flag
+  // as well as the positional form; both mean the same file.
+  const topoPath = positional[0] ?? flags.topology
   if (!topoPath) {
     console.error(C.red('error:') + ' missing topology path')
     return 2
@@ -424,6 +437,82 @@ async function cmdProbe({ flags }) {
   return r.resolved?.method === 'measured' ? 0 : 1
 }
 
+/**
+ * `ensp doctor [--topology t.topo] [--json] [--shallow]`
+ *
+ * Answers "why did nothing happen?" before a lab starts. Every failing check
+ * carries its own fix, because the failure modes here (missing image, covered
+ * window, dead input queue) all look the same from the outside.
+ */
+async function cmdDoctor({ positional, flags }) {
+  let models
+  if (flags.topology || positional[0]) {
+    const file = flags.topology || positional[0]
+    try {
+      models = modelsOf(await readTopology(file))
+    } catch (error) {
+      console.error(C.red('error:') + ' ' + error.message)
+      return 1
+    }
+  }
+  const report = doctor({
+    exe: flags.exe,
+    vbox: flags.vbox,
+    models,
+    deep: !flags.shallow,
+  })
+  if (flags.json) {
+    console.log(JSON.stringify(report, null, 2))
+    return report.ok ? 0 : 1
+  }
+  console.log(formatDoctor(report))
+  return report.ok ? 0 : 1
+}
+
+/**
+ * `ensp verify <scenario-id> --topology t.topo [--json]`
+ *
+ * Runs the scenario's acceptance checks against a lab that is already up. This
+ * is the difference between "the commands were sent" and "the lab works": a
+ * curated check asserts on what the device reports, and a smoke check at least
+ * proves every verification command still parses.
+ */
+async function cmdVerify({ positional, flags }) {
+  const id = positional[0]
+  if (!id) {
+    console.error(C.red('error:') + ' usage: ensp verify <scenario-id> --topology <topology.topo>')
+    return 2
+  }
+  if (!SCENARIOS[id]) {
+    console.error(C.red('error:') + ` unknown scenario "${id}"`)
+    return 2
+  }
+  const topology = flags.topology
+  if (!topology) {
+    console.error(C.red('error:') + ' verify needs --topology <the .topo file that is running>')
+    return 2
+  }
+  const report = await runAcceptance({
+    id,
+    topology,
+    timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
+    waitMs: flags.wait ? Number(flags.wait) : undefined,
+    onProgress: flags.json
+      ? undefined
+      : (e) => {
+          if (e.phase === 'check') process.stderr.write(C.dim(`  checking ${e.id} on ${e.device}\n`))
+          else if (e.phase === 'retry')
+            process.stderr.write(C.dim(`  waiting ${Math.round(e.waited / 1000)}s for ${e.id} on ${e.device} (${e.why})\n`))
+        },
+  })
+  if (flags.json) {
+    console.log(JSON.stringify(report, null, 2))
+    return report.ok ? 0 : 1
+  }
+  console.log(formatAcceptance(report))
+  return report.ok ? 0 : 1
+}
+
 // ------------------------------------------------------------------------- main
 async function main() {
   const { verb, positional, flags } = parseArgs(process.argv.slice(2))
@@ -441,6 +530,10 @@ async function main() {
       return cmdStatus({ positional, flags })
     case 'probe':
       return cmdProbe({ positional, flags })
+    case 'doctor':
+      return cmdDoctor({ positional, flags })
+    case 'verify':
+      return cmdVerify({ positional, flags })
     case 'stop':
       return cmdUp({ positional, flags: { ...flags, stop: true } })
     case 'preset':

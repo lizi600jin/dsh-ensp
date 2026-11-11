@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { SCENARIOS, SCENARIO_IDS, byLevel } from '../src/core/presets.mjs'
 import { LABS, LAB_IDS, hasLab, labAddressing, labDevices, labModels } from '../src/core/labs.mjs'
 import { imageNotesFor } from '../src/core/compat.mjs'
+import { hasChecks, EXPECTATIONS } from '../src/core/acceptance.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '..')
@@ -128,9 +129,13 @@ function render(catalogue = SCENARIOS) {
             out.push(`| ${row.device} | ${row.port} | ${row.ip} | ${row.note || ''} |`)
           }
         }
-        out.push('', `生成：\`ensp preset ${id} --topo ${id}.topo\``)
         const notes = imageNotesFor(labModels(id))
         for (const [model, note] of notes) out.push(`- 设备镜像：${model} ${note}`)
+        out.push('', `生成：\`ensp preset ${id} --topo ${id}.topo\``)
+        const verifyLine = hasChecks(id)
+          ? `- 验收：\`ensp verify ${id} --topology ${id}.topo\`（${EXPECTATIONS[id].length} 条断言）`
+          : `- 验收：\`ensp verify ${id} --topology ${id}.topo\`（无专门断言，逐条跑本场景的验证命令）`
+        out.push(verifyLine)
       }
       out.push('')
     }

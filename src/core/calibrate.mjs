@@ -119,6 +119,7 @@ public class Cap {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr wp, IntPtr lp);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
 }
 '@
@@ -130,7 +131,14 @@ public class Cap {
 $h = [IntPtr]::new([int64]${hwnd})
 if (-not [Cap]::IsWindow($h)) { 'ERR: bad window handle'; exit 0 }
 $wasIconic = [Cap]::IsIconic($h)
-[void][Cap]::ShowWindow($h, 9)
+# ShowWindow(SW_RESTORE) silently fails on this MFC frame and leaves the window at
+# its 237x39 icon size, which then fails the size check below. SC_RESTORE is what
+# the system menu sends and it does restore the frame.
+if ($wasIconic) {
+  [void][Cap]::ShowWindow($h, 9)
+  [void][Cap]::SendMessage($h, 0x0112, [IntPtr]::new(0xF120), [IntPtr]::Zero)
+  Start-Sleep -Milliseconds 700
+}
 [void][Cap]::SetForegroundWindow($h)
 Start-Sleep -Milliseconds 1100
 
@@ -232,6 +240,7 @@ public class Cap {
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr wp, IntPtr lp);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
 }
 '@ -ErrorAction Stop
