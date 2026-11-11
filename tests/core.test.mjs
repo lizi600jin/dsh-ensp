@@ -11,7 +11,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-import { viewOf, hostnameOf } from '../src/core/console.mjs'
+import { viewOf, hostnameOf, hasPagerMarker } from '../src/core/console.mjs'
 import { parseScript } from '../src/core/provision.mjs'
 import {
   interfaceName,
@@ -20,6 +20,7 @@ import {
   serialiseTopology,
 } from '../src/core/topology.mjs'
 import { buildTopology, twoPcLab, MODEL_SPECS, vrpToFlatIndex } from '../src/core/build.mjs'
+import { planFor, resolveDevice, hasChecks } from '../src/core/acceptance.mjs'
 
 test('viewOf: hostnames containing hyphens are still system view', () => {
   // Real failure: `[R1-TEST]` was classified as a sub-view because it contains a
@@ -534,4 +535,124 @@ test('a rejected command is not retried', async () => {
   // into a passing one, so a rejected command must not enter the retry loop.
   assert.equal(calls, report.results.length, 'a rejected command must not be retried')
   assert.match(report.results[0].why, /rejected/)
+})
+
+test('the legacy Router model exposes its ports in VRP order', async () => {
+  // Teaching material uses `Router` heavily (43 of 190 devices in the ICVE corpus)
+  // while eNSP's own samples never do, so the model table simply lacked it. The
+  // order below was read off a live device with `display interface brief`.
+  const { describePorts, portCount, vrpToFlatIndex: toIndex, flatIndexToVrp } = await import(
+    '../src/core/models.mjs'
+  )
+  assert.equal(portCount('Router'), 10)
+  assert.equal(
+    describePorts('Router'),
+    'Ethernet0/0/0..1, GigabitEthernet0/0/0..3, Serial0/0/0..3',
+  )
+  assert.equal(toIndex('Router', 'Ethernet0/0/0'), 0)
+  assert.equal(toIndex('Router', 'GigabitEthernet0/0/0'), 2)
+  assert.equal(toIndex('Router', 'Serial0/0/0'), 6)
+  assert.equal(flatIndexToVrp('Router', 6), 'Serial0/0/0')
+  assert.equal(flatIndexToVrp('Router', 99), null)
+  assert.equal(portCount('Client'), 1, 'a Client is a single-port web client')
+})
+
+test('a device with added hardware uses its own declared port layout', async () => {
+  // Real failure: a NAT lab mounts a serial card on an AR2220, so flat index 3 is
+  // Serial0/0/0 there. Trusting the stock model table left two links unresolved.
+  const xml = `<?xml version="1.0" encoding="UNICODE" ?>
+<topo version="1.2.00.390">
+  <devices>
+    <dev id="A" name="AR1" model="AR2220" com_port="2000" bootmode="1" cx="0" cy="0">
+      <slot number="slot17" isMainBoard="1">
+        <interface sztype="Ethernet" interfacename="GE" count="1" />
+        <interface sztype="Ethernet" interfacename="GE" count="2" />
+        <interface sztype="Serial" interfacename="Serial" count="2" />
+      </slot>
+    </dev>
+    <dev id="B" name="AR2" model="AR2220" com_port="2001" bootmode="1" cx="200" cy="0">
+      <slot number="slot17" isMainBoard="1">
+        <interface sztype="Ethernet" interfacename="GE" count="1" />
+        <interface sztype="Ethernet" interfacename="GE" count="2" />
+        <interface sztype="Serial" interfacename="Serial" count="2" />
+      </slot>
+    </dev>
+  </devices>
+  <lines>
+    <line srcDeviceID="A" destDeviceID="B">
+      <interfacePair lineName="Serial" srcIndex="3" tarIndex="3" />
+    </line>
+  </lines>
+</topo>`
+  const topo = parseTopology(xml)
+  assert.equal(topo.links.length, 1)
+  assert.equal(topo.links[0].srcPort, 'Serial0/0/0', 'the file, not the model table, says what index 3 is')
+  assert.equal(topo.links[0].dstPort, 'Serial0/0/0')
+  assert.equal(topo.devices[0].interfaces, 5, 'the declared count includes the mounted card')
+})
+
+test('every port in the ICVE fixture corpus resolves to a CLI name', async () => {
+  // The fixture corpus is 18 topologies from a real teaching course: 190 devices,
+  // 185 links, and two models (Router, Client) that eNSP's own samples never use.
+  // Keeping them means a future model-table edit that breaks legacy hardware fails
+  // here instead of on a student's topology.
+  const { readdir, readFile } = await import('node:fs/promises')
+  const { join, dirname } = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const dir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'icve')
+  const files = (await readdir(dir)).filter((f) => f.endsWith('.topo')).sort()
+  assert.equal(files.length, 18, 'the fixture corpus must stay complete')
+
+  let devices = 0
+  let links = 0
+  let consoles = 0
+  const seen = new Set()
+  for (const file of files) {
+    const text = (await readFile(join(dir, file), 'utf8')).replace(/^\uFEFF/, '')
+    const topo = parseTopology(text)
+    devices += topo.devices.length
+    links += topo.links.length
+    consoles += topo.devices.filter((d) => d.comPort).length
+    for (const d of topo.devices) seen.add(d.model)
+    for (const l of topo.links) {
+      assert.ok(l.srcPort, `${file}: ${l.srcName} index ${l.srcIndex} has no CLI port`)
+      assert.ok(l.dstPort, `${file}: ${l.dstName} index ${l.dstIndex} has no CLI port`)
+    }
+    // Serialising what we parsed must preserve both counts.
+    const round = parseTopology(serialiseTopology(topo))
+    assert.equal(round.devices.length, topo.devices.length, `${file}: device count changed`)
+    assert.equal(round.links.length, topo.links.length, `${file}: link count changed`)
+  }
+  assert.equal(devices, 190)
+  assert.equal(links, 185)
+  assert.equal(consoles, 87)
+  assert.ok(seen.has('Router'), 'the corpus must keep exercising the legacy Router model')
+  assert.ok(seen.has('Client'), 'the corpus must keep exercising the Client model')
+})
+
+test('a pager stop is recognised as unfinished output', () => {
+  // Real transcript shape: the page break lands mid-transcript and the rest of
+  // the answer only arrives after a keypress. Treating that as the end of the
+  // output silently drops configuration lines, which then look like they were
+  // never applied.
+  assert.equal(hasPagerMarker('  ---- More ----'), true)
+  assert.equal(hasPagerMarker(' interface Serial0/0/0\n  ---- More ----\n'), true)
+  assert.equal(hasPagerMarker('[RA]'), false)
+  assert.equal(hasPagerMarker('interface Serial0/0/0\n[RA-Serial0/0/0]'), false)
+  assert.equal(hasPagerMarker(''), false)
+})
+
+test('curated checks follow the devices a foreign topology actually has', async () => {
+  // The shipped blueprints name devices R1/R2/R3. A lab downloaded from a course
+  // platform names them RA/RB/RC, and reporting `no console port for device "R1"`
+  // on a perfectly healthy lab sends the reader chasing a typo instead of the lab.
+  assert.equal(resolveDevice('R1', ['RA', 'RB', 'RC']), 'RA')
+  assert.equal(resolveDevice('R2', ['RA', 'RB', 'RC']), 'RB')
+  assert.equal(resolveDevice('R9', ['RA', 'RB']), 'RB', 'out of range clamps to the last device')
+  assert.equal(resolveDevice('R1', []), 'R1', 'with nothing to map onto, keep the name')
+  assert.equal(resolveDevice('RA', ['RA', 'RB']), 'RA', 'an exact match wins')
+  const plan = planFor('rip', { devices: ['RC', 'RA', 'RB'] })
+  assert.equal(plan.source, 'curated')
+  assert.equal(hasChecks('rip'), true)
+  assert.deepEqual([...new Set(plan.checks.map((c) => c.on))], ['RA'], 'checks land on the first device by natural order')
 })

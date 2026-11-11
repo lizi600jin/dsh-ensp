@@ -16,6 +16,8 @@ export {
   flatIndexToVrp,
   portCount,
   describePorts,
+  portsFromDeclarations,
+  declarationsFor,
 } from './models.mjs'
 
 // Kept for consumers written against the old shape; the table behind it was
@@ -76,13 +78,14 @@ export {
   EXPECTATIONS,
   evaluateAssertion,
   planFor,
+  resolveDevice,
   hasChecks,
   consolePorts,
   runAcceptance,
   formatAcceptance,
 } from './acceptance.mjs'
 
-export { ConsoleSession, openConsole, probeConsole, viewOf, hostnameOf } from './console.mjs'
+export { ConsoleSession, openConsole, probeConsole, viewOf, hostnameOf, hasPagerMarker } from './console.mjs'
 
 export {
   enspPid,

@@ -95,6 +95,21 @@ shows an empty canvas with **no error message**.
 | `MCS` | `Ethernet/Ethernet×1` | 1 | 1 |
 | `Cloud` | `Ethernet/Ethernet×3`, `Ethernet/GE×0`, `Serial/Serial×0` | 3 | 4 |
 | `FRSW` | `Serial/Serial×16` | 16 | 1 |
+| `Router` | `Ethernet/Ethernet×2`, `Ethernet/GE×4`, `Serial/Serial×4` | 10 | 43 |
+| `Client` | `Ethernet/Ethernet×1` | 1 | 4 |
+
+`Router` and `Client` were counted on the 18-topology teaching corpus (190 devices,
+185 links) rather than on the bundled samples, where they never appear. Both are
+`isplugin="0"` in `res/items.xml`, so they ship with every eNSP install; the
+`Router` entry does say `eNSP don't maintained this device any more, just keep it.`
+The CLI name order was confirmed on a live device: `display interface brief` lists
+`Ethernet0/0/0..1`, `GigabitEthernet0/0/0..3`, `Serial0/0/0..3`, `NULL0`.
+
+> **A device may add cards, so read its own declarations.** A NAT lab in that
+> corpus mounts a serial card on an AR2220: flat index 3 is `Serial0/0/0` there and
+> `GigabitEthernet0/0/3` on a stock unit. `parseTopology` therefore builds the port
+> list from each `<dev>`'s `<interface>` block and only falls back to the model
+> table when a file declares nothing.
 
 > **`PC` declares `interfacename="GE"`, not `"Ethernet"`.** An earlier version of
 > this project wrote `Ethernet` for PCs on the theory that a PC has one Ethernet

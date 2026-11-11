@@ -23,7 +23,14 @@
 
 import { readFile, writeFile } from 'node:fs/promises'
 
-import { MODEL_SPECS, GEOMETRY, portCount, flatIndexToVrp, vrpToFlatIndex } from './models.mjs'
+import {
+  MODEL_SPECS,
+  GEOMETRY,
+  portCount,
+  portsFromDeclarations,
+  flatIndexToVrp,
+  vrpToFlatIndex,
+} from './models.mjs'
 
 /**
  * Icon bounding box, measured from every cable anchor in eNSP's own samples.
@@ -90,14 +97,30 @@ export function parseTopology(xml) {
   const version = attr(xml.match(/<topo[^>]*>/)?.[0] ?? '', 'version')
 
   const devices = []
+  const portsById = new Map()
   for (const m of xml.matchAll(/<dev\b([^>]*)>([\s\S]*?)<\/dev>/g)) {
     const head = m[1]
     const body = m[2]
     const model = attr(head, 'model')
-    const declared = [...body.matchAll(/<interface\b[^>]*count="(\d+)"/g)]
-      .reduce((sum, x) => sum + Number(x[1]), 0)
+    // The device's own <interface> block is the authoritative port layout: a lab
+    // can mount extra cards (a serial card on an AR2220, for instance), and then
+    // the flat indices no longer match the stock model table.
+    const declarations = [...body.matchAll(/<interface\b([^>]*)\/?>/g)].map((decl) => {
+      const tag = decl[1]
+      const firstNumber = attr(tag, 'firstnumber')
+      return {
+        sztype: attr(tag, 'sztype') ?? 'Ethernet',
+        name: attr(tag, 'interfacename') ?? 'GE',
+        count: Number(attr(tag, 'count') ?? 0),
+        firstNumber: firstNumber === null ? null : Number(firstNumber),
+      }
+    })
+    const declared = declarations.reduce((sum, x) => sum + x.count, 0)
+    const ports = portsFromDeclarations(declarations, model)
+    const id = attr(head, 'id')
+    if (id) portsById.set(id, ports)
     devices.push({
-      id: attr(head, 'id'),
+      id,
       name: attr(head, 'name'),
       model,
       comPort: Number(attr(head, 'com_port') ?? 0) || null,
@@ -128,8 +151,8 @@ export function parseTopology(xml) {
       media: attr(pair, 'lineName') ?? 'Copper',
       srcName: src?.name ?? null,
       dstName: dst?.name ?? null,
-      srcPort: src ? interfaceName(src.model, srcIndex) : null,
-      dstPort: dst ? interfaceName(dst.model, dstIndex) : null,
+      srcPort: src ? (portsById.get(srcId)?.[srcIndex] ?? interfaceName(src.model, srcIndex)) : null,
+      dstPort: dst ? (portsById.get(dstId)?.[dstIndex] ?? interfaceName(dst.model, dstIndex)) : null,
     })
   }
 

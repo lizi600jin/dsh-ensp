@@ -36,6 +36,18 @@ const ERROR_RE =
 /** A `[Y/N]`-style confirmation waiting for an answer. */
 const CONFIRM_RE = /(?:\[Y\/N\]|\(y\/n\)|\[y\/n\]|continue\?|Are you sure)/i
 
+/**
+ * VRP's pager marker. `screen-length 0 temporary` normally turns paging off, but
+ * it is a user-view command: issued from a sub-view it is rejected, and on some
+ * builds it is rejected even in user view. When the pager is still on, a long
+ * `display` command stops at this marker and the rest of the output is simply
+ * missing — which reads as "the configuration is not there" when it is.
+ */
+const PAGER_RE = /---- More ----\s*$/
+
+/** Cap the number of pages we will advance for one command. */
+const MAX_PAGES = 200
+
 const VIEW = {
   user: 'user',
   system: 'system',
@@ -89,6 +101,50 @@ export function hostnameOf(prompt) {
   // while `[name-sub]` is a sub-view whose hostname is the part before the last dash
   // only when the tail is not itself a plausible continuation of the name.
   return inner
+}
+
+/**
+ * Does this transcript end on a pager stop rather than a prompt?
+ *
+ * Exported because "the output stops at `---- More ----`" is the difference
+ * between "the device has nothing more to say" and "we are about to lose the rest
+ * of the answer", and that distinction deserves a test of its own.
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function hasPagerMarker(text) {
+  return PAGER_RE.test(String(text ?? '').trimEnd())
+}
+
+/**
+ * Remove pager markers from a transcript collected across several pages.
+ *
+ * VRP prints `---- More ----` where the page broke and then continues on the next
+ * page. The continuation is kept as its own line: page breaks land on line
+ * boundaries in practice, and a spurious break inside a line is harmless, while
+ * gluing two lines together would corrupt `^keyword` style assertions.
+ *
+ * This is only a fallback: {@link ConsoleSession#prepare} normally turns paging
+ * off before any output is read.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function stitchPages(text) {
+  const out = []
+  for (const line of text.split('\n')) {
+    const m = line.match(/^(.*?)---- More ----(.*)$/)
+    if (!m) {
+      out.push(line)
+      continue
+    }
+    const head = m[1].trimEnd()
+    if (head) out.push(head)
+    const tail = m[2].trimStart()
+    if (tail) out.push(tail)
+  }
+  return out.join('\n')
 }
 
 /** Strip ANSI escapes and trailing whitespace from a transcript chunk. */
@@ -191,7 +247,9 @@ export class ConsoleSession {
       const text = clean(this.#buf)
       // A confirmation question wins over a stale prompt: answer it explicitly.
       if (CONFIRM_RE.test(text.split('\n').slice(-3).join('\n'))) break
-      if (PROMPT_RE.test(text)) {
+      // A pager stop is a terminal state too: nothing more will arrive until we
+      // send a key, so waiting for a prompt here would burn the whole timeout.
+      if (PROMPT_RE.test(text) || PAGER_RE.test(text.trimEnd())) {
         const before = this.#buf.length
         await this.#waitUntil(() => this.#buf.length !== before || this.#closed, settleMs)
         if (this.#buf.length === before) break
@@ -199,7 +257,7 @@ export class ConsoleSession {
         // Poll the buffer rather than sleeping a fixed slice: most commands reply
         // in a few milliseconds, and waiting 200 ms per line dominates the runtime
         // of a 300-line config.
-        await this.#waitUntil(() => PROMPT_RE.test(clean(this.#buf)) || this.#closed, 25)
+        await this.#waitUntil(() => PROMPT_RE.test(clean(this.#buf)) || PAGER_RE.test(clean(this.#buf).trimEnd()) || this.#closed, 25)
       }
     }
     const text = clean(this.#buf)
@@ -260,6 +318,20 @@ export class ConsoleSession {
       output += await this.#readToPrompt(timeoutMs)
     }
 
+    // Walk the pager to the end. A page ends at `---- More ----` with no prompt,
+    // so the command is not finished and the remaining output would be lost.
+    let pages = 0
+    while (PAGER_RE.test(output.trimEnd()) && pages < MAX_PAGES && !this.#closed) {
+      pages += 1
+      this.#buf = ''
+      this.writeRaw(' ')
+      output += await this.#readToPrompt(timeoutMs)
+    }
+    // The marker sits inline where the page broke: VRP prints `---- More ----`
+    // followed by the rest of the line it interrupted. Stitch that tail back onto
+    // the previous line so the caller sees what paging disabled would have shown.
+    if (pages > 0) output = stitchPages(output)
+
     const errorMatch = output.match(ERROR_RE)
     const prompt = this.#prompt
     return {
@@ -311,10 +383,15 @@ export class ConsoleSession {
 
   /**
    * Enable command paging off so long `display` output arrives in one piece.
-   * Failures are non-fatal: some older VRP builds reject the command.
+   *
+   * Failures are non-fatal on purpose: `screen-length 0 temporary` is a user-view
+   * command and is rejected from a sub-view, and some builds reject it outright.
+   * `exec` pages through `---- More ----` stops on its own, so the only cost of a
+   * rejection here is a few extra round trips.
    */
   async prepare() {
-    await this.exec('screen-length 0 temporary', { timeoutMs: 8000 })
+    if (!this.#prompt) await this.prime()
+    if (this.view === VIEW.user) await this.exec('screen-length 0 temporary', { timeoutMs: 8000 })
     return this
   }
 

@@ -1,0 +1,92 @@
+[
+  {
+    "file": "01.topo",
+    "lab": "01-局域网高可靠性配置",
+    "bytes": 23879
+  },
+  {
+    "file": "02.topo",
+    "lab": "02-VRRP配置",
+    "bytes": 11970
+  },
+  {
+    "file": "03.topo",
+    "lab": "03-MSTP配置",
+    "bytes": 17251
+  },
+  {
+    "file": "04.topo",
+    "lab": "04-NAT综合配置",
+    "bytes": 22001
+  },
+  {
+    "file": "05.topo",
+    "lab": "05-扩展ACL配置-交换网络",
+    "bytes": 12241
+  },
+  {
+    "file": "06.topo",
+    "lab": "06-扩展ACL配置",
+    "bytes": 14682
+  },
+  {
+    "file": "07.topo",
+    "lab": "07-标准ACL配置",
+    "bytes": 12925
+  },
+  {
+    "file": "08.topo",
+    "lab": "08-PPP-MP配置",
+    "bytes": 5523
+  },
+  {
+    "file": "09.topo",
+    "lab": "09-PPP-PAP-CHAP配置",
+    "bytes": 7661
+  },
+  {
+    "file": "10.topo",
+    "lab": "10-交换机三层链路聚合",
+    "bytes": 10061
+  },
+  {
+    "file": "11.topo",
+    "lab": "11-交换机二层链路聚合",
+    "bytes": 9593
+  },
+  {
+    "file": "12.topo",
+    "lab": "12-VLAN-hybrid配置",
+    "bytes": 9189
+  },
+  {
+    "file": "13.topo",
+    "lab": "13-VLAN综合配置",
+    "bytes": 19661
+  },
+  {
+    "file": "14.topo",
+    "lab": "14-路由引入配置",
+    "bytes": 19278
+  },
+  {
+    "file": "15.topo",
+    "lab": "15-OSPF-Vlink配置",
+    "bytes": 14156
+  },
+  {
+    "file": "16.topo",
+    "lab": "16-OSPF配置",
+    "bytes": 28854
+  },
+  {
+    "file": "17.topo",
+    "lab": "17-RIP配置",
+    "bytes": 11365
+  },
+  {
+    "file": "18.topo",
+    "lab": "18-静态路由配置",
+    "bytes": 15199
+  }
+]

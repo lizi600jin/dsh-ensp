@@ -1,0 +1,19 @@
+01.topo dev=16 links=22 console=8 models=PC,S3700,S5700,Server
+02.topo dev=9 links=9 console=4 models=PC,Router,S3700
+03.topo dev=12 links=13 console=4 models=PC,S3700
+04.topo dev=16 links=15 console=8 models=AR2220,PC,S3700,S5700,Server
+05.topo dev=10 links=9 console=4 models=PC,S3700,S5700,Server
+06.topo dev=12 links=11 console=4 models=Client,PC,Router,S3700,Server
+07.topo dev=10 links=9 console=4 models=PC,Router,S3700,Server
+08.topo dev=4 links=3 console=2 models=PC,Router
+09.topo dev=6 links=5 console=3 models=PC,Router
+10.topo dev=7 links=6 console=3 models=PC,S5700
+11.topo dev=7 links=6 console=3 models=PC,S3700
+12.topo dev=7 links=6 console=2 models=PC,S3700,Server
+13.topo dev=15 links=14 console=7 models=PC,Router,S3700,S5700
+14.topo dev=14 links=14 console=8 models=PC,Router,S3700
+15.topo dev=9 links=8 console=5 models=PC,Router
+16.topo dev=19 links=19 console=9 models=PC,Router
+17.topo dev=6 links=6 console=3 models=PC,Router
+18.topo dev=11 links=10 console=6 models=PC,Router
+TOTAL dev=190 links=185 consoles=87

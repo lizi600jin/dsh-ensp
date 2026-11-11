@@ -76,6 +76,29 @@ export const MODEL_SPECS = {
     vrp: 'GigabitEthernet0/0/',
     console: true,
   },
+  // Lab builds from teaching material (the 18 ICVE topologies) use the legacy
+  // `Router` model far more than any AR: 43 of 190 devices. Its port list is two
+  // fast Ethernet, four gigabit, four serial ports, and the CLI keeps the same
+  // order — verified by booting one and reading `display interface brief`.
+  // `Router` and `Client` are `isplugin="0"` in eNSP's items.xml, so they are
+  // built in; a machine "missing" them is not out of date.
+  Router: {
+    groups: [
+      ['Ethernet', 'Ethernet', 2, 0, 'Ethernet0/0/'],
+      ['Ethernet', 'GE', 4, 0],
+      ['Serial', 'Serial', 4, 0, 'Serial0/0/'],
+    ],
+    base: 0,
+    vrp: 'Ethernet0/0/',
+    console: true,
+  },
+  // A web client: one Ethernet port, no console.
+  Client: {
+    groups: [['Ethernet', 'Ethernet', 1, 0, 'Ethernet0/0/']],
+    base: 0,
+    vrp: 'Ethernet0/0/',
+    console: false,
+  },
   // PC and Server declare `interfacename="GE"` in the file but expose
   // `Ethernet0/0/1` on the CLI. eNSP's file vocabulary and VRP's differ here.
   PC: {
@@ -130,6 +153,60 @@ export const GEOMETRY = { editLeftOffset: 27, editTopOffset: 54 }
  * (+27.0,+70.2) x29, (+27.0,-16.2) x27.
  */
 export const ICON = { w: 86, h: 86, left: -16.2, right: 70.2, top: -16.2, bottom: 70.2 }
+
+/**
+ * CLI namespace for one interface group.
+ *
+ * The eNSP file and VRP disagree in two places: PC/Server store `GE` but expose
+ * `Ethernet`, and firewalls store `GE` but number from `GigabitEthernet1/0/`.
+ * The model spec states those overrides by position; everything else follows from
+ * the declared interface name.
+ */
+function cliPrefixForGroup(sztype, enspPrefix, model, groupIndex) {
+  const override = MODEL_SPECS[model]?.groups?.[groupIndex]?.[4]
+  if (override) return override
+  if (enspPrefix === 'GE' || sztype === 'GE') return 'GigabitEthernet0/0/'
+  if (sztype === 'Serial' || enspPrefix === 'Serial') return 'Serial0/0/'
+  return 'Ethernet0/0/'
+}
+
+/**
+ * Build a port list from a device's own `<interface>` declarations.
+ *
+ * This matters for labs that add hardware: a stock AR2220 has no serial ports, but
+ * a NAT lab in the ICVE corpus mounts a serial card, so flat index 3 is
+ * `Serial0/0/0` there and `GigabitEthernet0/0/3` on a stock unit. The file states
+ * the real layout, so the file wins over the model table.
+ *
+ * @param {Array<{sztype: string, name: string, count: number, firstNumber: number|null}>} declarations
+ * @param {string} model
+ * @returns {string[]} CLI port name per flat index, in declaration order
+ */
+export function portsFromDeclarations(declarations, model) {
+  if (!declarations?.length) return []
+  const base = MODEL_SPECS[model]?.base ?? 0
+  const ports = []
+  declarations.forEach((d, groupIndex) => {
+    const first = d.firstNumber ?? base
+    const cli = cliPrefixForGroup(d.sztype, d.name, model, groupIndex)
+    for (let i = 0; i < d.count; i += 1) ports.push(`${cli}${first + i}`)
+  })
+  return ports
+}
+
+/**
+ * Resident interface declarations of a model, as `{sztype, name, count, firstNumber}`.
+ *
+ * Callers use this when they need to emit the `<interface>` block for a device.
+ */
+export function declarationsFor(model) {
+  return (MODEL_SPECS[model]?.groups ?? []).map(([sztype, name, count, firstNumber]) => ({
+    sztype,
+    name,
+    count,
+    firstNumber: firstNumber ?? null,
+  }))
+}
 
 /** Total declared interface count for a model. */
 export function portCount(model) {

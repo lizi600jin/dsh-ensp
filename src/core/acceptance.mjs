@@ -170,6 +170,25 @@ export function evaluateAssertion(output, expect = {}) {
 }
 
 /**
+ * Resolve a curated check's device name against the devices that actually exist.
+ *
+ * Curated plans name devices the way the shipped blueprints do: R1, R2, R3. A lab
+ * built from somebody else's topology calls them RA/RB/RC, LSW1/LSW2, or anything
+ * at all. Reporting `no console port for device "R1"` on a healthy lab is worse
+ * than useless, so fall back to the device that plays the same role: the number in
+ * the name picks the position (R1 first, R2 second), and a name without a number
+ * picks the first console device.
+ */
+export function resolveDevice(on, available = []) {
+  const names = [...available].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+  if (!names.length) return on
+  if (names.includes(on)) return on
+  const numbered = /(\d+)$/.exec(on)
+  const index = numbered ? Math.max(0, Number(numbered[1]) - 1) : 0
+  return names[Math.min(index, names.length - 1)]
+}
+
+/**
  * Build the acceptance plan for a scenario.
  *
  * Curated expectations win. Otherwise the scenario's `steps[].verify` commands
@@ -185,7 +204,7 @@ export function planFor(id, { devices } = {}) {
       scenario: id,
       title: scenario.title,
       source: 'curated',
-      checks: curated.map((c) => ({ ...c, kind: 'assert' })),
+      checks: curated.map((c) => ({ ...c, on: resolveDevice(c.on, devices), kind: 'assert' })),
     }
   }
   const first = (devices && devices.length && devices[0]) || scenario.devices?.split(/[、,，\s]+/)[0]

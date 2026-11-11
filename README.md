@@ -25,6 +25,8 @@
 
 生成 eNSP 可直接打开并正常显示的 `.topo` 文件。支持内置场景，也可自定义设备与链路。
 
+支持的机型来自 `src/core/models.mjs` 的一张表，其中 16 个机型各有测过的接口布局。`Router` 和 `Client` 是教学实验里常见的两个老机型：eNSP 自带的 40 个样例里一次都没出现，所以早期版本的表漏掉了它们，而实际课程作业里它们占了 43/190 台设备。解析拓扑时，端口名优先按设备自己声明的 `<interface>` 块算——实验里加装串口卡之后，扁平索引 3 在同一型号上可以是 `Serial0/0/0`，也可以不是。
+
 ```js
 import { twoPcLab, writeTopology } from 'dsh-ensp'
 
@@ -198,6 +200,8 @@ accepted: 2/2 checks passed
 ```
 
 约 30 个场景有专门写的断言（OSPF 要 `Full`、BGP 要 `Established`、VRRP 要有 `Master`/`Backup`、MPLS VPN 要有 `Established` 与 VPN 路由表），其余场景回退成“把场景里提到的验证命令都跑一遍”的冒烟检查。判定逻辑在 `src/core/acceptance.mjs` 的 `EXPECTATIONS`，断言支持 `contains`、`notContains`、`matches`、`minLines`。对应的工具是 `ensp_verify`，`ensp_scenario` 会告诉某个场景有没有专门断言。
+
+断言里的设备名按角色对应到你实际的拓扑：蓝图叫 `R1`/`R2`，而下载来的课程作业可能叫 `RA`/`RB`/`RC`，校验时会取第一台有控制台的设备（`R2` 取第二台），不会因为名字不同就报“找不到设备”。
 
 断言不通过时会自己重试，因为路由协议是在命令返回之后才收敛的。`ensp apply` 一结束就验收，OSPF 邻居通常还在 `ExStart` 或 `2-Way`，只取一次快照会把它报成坏的实验。默认给 60 秒（`--wait` 改），通过时会注明等了多久：
 

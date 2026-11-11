@@ -814,8 +814,15 @@ export async function startAllDevices({
   }
 
   report({ phase: 'calibrate', hwnd })
-  // Calibration photographs the screen, so an occluded window yields anchors
-  // measured on the wrong pixels. Check first, and say who is in the way.
+  // Bringing the window forward and photographing it are the same problem seen
+  // twice: calibration reads pixels off the screen, so it has to happen while
+  // eNSP is actually in front. Focus first, then ask who owns the toolbar point.
+  // Doing it the other way round reports the window that was on top a moment ago
+  // (usually the terminal that launched us) as if it were a permanent blocker.
+  report({ phase: 'focus', hwnd })
+  let focused = focusEnsp(hwnd)
+  if (focused) await new Promise((resolve) => setTimeout(resolve, 300))
+
   const occlusion = checkOcclusion(hwnd)
   if (occlusion.occluded) {
     throw new Error(
@@ -843,9 +850,12 @@ export async function startAllDevices({
   }
   report({ phase: 'calibrated', method: anchors.method, detail: anchors.detail })
 
-  report({ phase: 'focus', hwnd })
-  const focused = focusEnsp(hwnd)
-  if (!focused) report({ phase: 'focus-failed', hwnd })
+  // The window was raised before calibration; re-raise it in case photographing
+  // the screen or the terminal regaining focus pushed it back down.
+  if (!focused) {
+    focused = focusEnsp(hwnd)
+    if (!focused) report({ phase: 'focus-failed', hwnd })
+  }
 
   report({ phase: 'click', button: 'start', anchor: anchors.start })
   const click = clickToolbar(hwnd, { button: 'start', anchors })
