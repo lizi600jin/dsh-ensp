@@ -361,6 +361,22 @@ test('device availability is checked before the client is started', async () => 
   assert.doesNotMatch(text, /cannot start:\s*$/)
 })
 
+test('availability does not depend on the catalogue being readable', async () => {
+  // The bug this guards: probeDevice used to return early with "available" when
+  // items.xml could not be read, so on a machine without eNSP (every CI runner) a
+  // USG6000V topology passed the preflight and then failed at start time. The
+  // assets a model needs are a property of the model, not of the catalogue file.
+  const { probeDevice, clearCatalogueCache } = await import('../src/core/compat.mjs')
+  clearCatalogueCache()
+  const nowhere = { root: 'Z:/definitely/not/an/ensp/install' }
+  assert.equal(probeDevice('USG6000V', nowhere).available, false)
+  assert.equal(probeDevice('USG5500', nowhere).available, false)
+  // Models that need no extra image stay usable even with no install on disk.
+  for (const model of ['AR2220', 'S5700', 'PC']) {
+    assert.equal(probeDevice(model, nowhere).available, true, `${model} wrongly blocked`)
+  }
+})
+
 test('a fully supported topology passes the availability check', async () => {
   const { checkTopologySupport } = await import('../src/core/compat.mjs')
   const { buildScenarioTopology } = await import('../src/core/labs.mjs')

@@ -123,21 +123,20 @@ export function probeDevice(model, options = {}) {
   const root = options.root ?? DEFAULT_ENSP_ROOT
   const entry = readCatalogue(root).get(model)
 
-  if (!entry) {
-    // Models missing from the catalogue are handled by the caller (a topology that
-    // names an unknown model is a different error); stay permissive here.
-    return { model, available: true }
-  }
-
-  if (entry.plugin && entry.pluginPath) {
-    const dll = path.join(root, 'plugin', entry.pluginPath.replace(/\\/g, '/'))
+  if (entry?.plugin && entry.pluginPath) {
+    const dll = path.join(root, 'plugin', entry.pluginPath.split('\\').join('/'))
     if (!existsSync(dll)) {
       return { model, available: false, reason: `插件缺失：${path.relative(root, dll)}` }
     }
   }
 
+  // Checked before the catalogue entry on purpose: the assets a model needs are a
+  // property of the model, not of the catalogue file. A machine with no eNSP
+  // installed at all still cannot start a USG6000V, and answering "available"
+  // because items.xml was unreadable would be the exact false negative this module
+  // exists to prevent.
   for (const asset of PLUGIN_ASSETS[model] ?? []) {
-    if (!existsSync(path.join(root, asset.rel.replace(/\//g, path.sep)))) {
+    if (!existsSync(path.join(root, asset.rel))) {
       return { model, available: false, reason: asset.why }
     }
   }
@@ -146,6 +145,8 @@ export function probeDevice(model, options = {}) {
     return { model, available: false, reason: RETIRED[model] }
   }
 
+  // Unknown models are the caller's problem (a topology naming them is a different
+  // error), so stay permissive rather than blocking every lab on a stale catalogue.
   return { model, available: true }
 }
 
