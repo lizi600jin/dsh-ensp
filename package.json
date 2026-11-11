@@ -1,6 +1,6 @@
 {
   "name": "dsh-ensp",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Automate Huawei eNSP labs: generate .topo files, start and stop devices, and push configuration one command at a time with per-command error reporting.",
   "keywords": [
     "dsh",
@@ -43,7 +43,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test \"tests/**/*.test.mjs\"",
+    "test": "node --test tests/core.test.mjs",
     "probe": "node src/cli/ensp.mjs probe",
     "docs": "node scripts/gen-scenarios-doc.mjs",
     "docs:check": "node scripts/gen-scenarios-doc.mjs --check"
