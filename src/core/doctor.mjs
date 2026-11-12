@@ -248,7 +248,7 @@ export function doctor(options = {}) {
             : `SendInput accepted ${input.sent} event(s) but the session last-input tick did not change (session ${input.session}, console session ${input.consoleSession})`,
         input.ok
           ? undefined
-          : 'This session cannot deliver mouse input, so the eNSP toolbar button can never be pressed. Run the tool from an interactive desktop session (a normal logged-in terminal), not from a service, a scheduled task, an SSH shell, or an agent sandbox.',
+          : 'Run the tool elevated (as administrator) from an interactive desktop session. A normal-integrity process cannot inject mouse input into eNSP, which runs at high integrity, and services or scheduled tasks cannot inject input at all.',
       ),
     )
   }

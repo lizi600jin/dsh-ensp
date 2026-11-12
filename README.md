@@ -25,7 +25,7 @@
 
 生成 eNSP 可直接打开并正常显示的 `.topo` 文件。支持内置场景，也可自定义设备与链路。
 
-支持的机型来自 `src/core/models.mjs` 的一张表，其中 16 个机型各有测过的接口布局。`Router` 和 `Client` 是教学实验里常见的两个老机型：eNSP 自带的 40 个样例里一次都没出现，所以早期版本的表漏掉了它们，而实际课程作业里它们占了 43/190 台设备。解析拓扑时，端口名优先按设备自己声明的 `<interface>` 块算——实验里加装串口卡之后，扁平索引 3 在同一型号上可以是 `Serial0/0/0`，也可以不是。
+机型与接口布局定义在 `src/core/models.mjs`，覆盖 16 个机型。解析拓扑时，端口名优先取自设备自身声明的 `<interface>` 块；同一型号在加装扩展卡后端口排布可能不同，声明块是唯一可靠依据。
 
 ```js
 import { twoPcLab, writeTopology } from 'dsh-ensp'
@@ -45,11 +45,11 @@ const topo = autoLayout(
 )
 ```
 
-拓扑格式有几处约束来自 eNSP 本身：接口分组必须与机型一致，链路锚点必须落在图标包围盒内。写错任意一项，eNSP 会打开一个没有任何设备的空白画布，并且不报错。规则见 [`docs/ENSP-FORMAT.md`](docs/ENSP-FORMAT.md)。
+拓扑格式有几处约束来自 eNSP 本身：接口分组必须与机型一致，链路锚点必须落在图标包围盒内。任一项写错，eNSP 会打开空白画布且不报错。规则见 [`docs/ENSP-FORMAT.md`](docs/ENSP-FORMAT.md)。
 
 ### 启动与停止设备
 
-自动定位工具栏按钮，无需手动点击。启动后按设备逐一确认就绪，窗口随即最小化，桌面可继续使用。
+自动定位工具栏按钮，无需手动点击。启动后按设备逐一确认就绪，随后最小化窗口，桌面可继续使用。
 
 ```bash
 ensp probe          # 重新标定按钮位置
@@ -57,7 +57,7 @@ ensp up lab.topo    # 打开、启动、确认就绪、最小化
 ensp stop           # 关闭全部设备
 ```
 
-eNSP 只允许运行一个实例，异常退出时可能留下不占线程的僵尸进程，它会一直持有这个单实例锁，使下一次启动打开空白窗口。工具在启动前会识别并清理这种进程。
+eNSP 只允许运行一个实例。异常退出可能遗留不占线程的僵尸进程，该进程持续持有单实例锁，导致下一次启动只打开空白窗口。工具在启动前会识别并清理此类进程。
 
 ### 下发配置
 
@@ -87,7 +87,7 @@ if (!result.ok) {
 
 ### 等待协议收敛
 
-路由协议是异步收敛的，配置下发完不代表邻居已经建立。这类断言一律走轮询，直到状态达成或超时。
+路由协议异步收敛，配置下发完成不代表邻居已建立。此类判定一律轮询，直到状态达成或超时。
 
 ```js
 import { waitForOspfFull, waitForOspfRoute, waitForOutput } from 'dsh-ensp'
@@ -97,7 +97,7 @@ await waitForOspfRoute({ port: 2000, prefix: '2.2.2.2/32' })
 await waitForOutput({ port: 2000, command: 'display ip routing-table', until: /2\.2\.2\.2/ })
 ```
 
-三个函数都返回 `{ ok, converged, output, attempts, waitedMs }`。固定等待一段时间再查询，在慢机器上会误判为失败，在快机器上纯属浪费。
+三个函数均返回 `{ ok, converged, output, attempts, waitedMs }`。固定等待在慢机器上会误判，在快机器上会浪费。
 
 ### 场景预设
 
@@ -110,16 +110,16 @@ ensp preset --search bgp             # 按关键词搜索
 ensp preset campus-network --topo campus.topo   # 生成该场景的拓扑
 ```
 
-每个场景给出三项信息：需要创建的对象、配置顺序、用于确认结果的检查命令。具体命令由使用者按设备补全。
+每个场景提供三项信息：需要创建的对象、配置顺序、用于确认结果的检查命令。具体命令由使用者按设备补全。
 
-场景自带拓扑蓝图：设备、链路、地址规划都是现成的，加上 `--topo` 就直接得到一个 eNSP 能打开的 `.topo`，不用先自己画图再算 IP。蓝图不含配置命令，场景仍然只是骨架。
+场景自带拓扑蓝图：设备、链路、地址规划均为现成内容，加 `--topo` 即生成 eNSP 可打开的 `.topo`，无需先绘图再规划地址。蓝图不含配置命令，场景仍为骨架。
 
 ```bash
 ensp preset ospf-single --topo ospf-single.topo
 ensp up ospf-single.topo
 ```
 
-场景清单与蓝图都是可生成、可校验的。`docs/SCENARIOS.md` 由 `src/core/presets.mjs` 与 `src/core/labs.mjs` 渲染而来，`npm run docs:check` 在两者不一致时返回非零，CI 也会执行这一步。
+场景清单与蓝图均可生成、可校验。`docs/SCENARIOS.md` 由 `src/core/presets.mjs` 与 `src/core/labs.mjs` 渲染，`npm run docs:check` 在两者不一致时返回非零，CI 亦执行该检查。
 
 ```bash
 npm run docs          # 重新生成 docs/SCENARIOS.md
@@ -128,9 +128,9 @@ npm run docs:check    # 只检查是否过期
 
 ### 设备镜像检查
 
-部分机型只有设备目录条目、没有随装镜像，最典型的是 `USG6000V`（eNSP 安装时需勾选该组件）。这类机型放上画布、存成 `.topo` 都没问题，但 eNSP 打开后会先渲染再自行退出，事后只能看到一堆“控制台无响应”，很容易误判成拓扑或插件的问题。
+部分机型只有设备目录条目、没有随装镜像，最典型的是 `USG6000V`（eNSP 安装时需勾选该组件）。这类机型可以正常放入画布并保存为 `.topo`，但 eNSP 打开后会先渲染再自行退出，表现为控制台全部无响应。
 
-`ensp up` 启动客户端之前会读 `res/items.xml` 与各插件的镜像文件，把启动不了的设备连同缺什么一起报出来：
+`ensp up` 会在启动客户端之前读取 `res/items.xml` 与各插件的镜像文件，把无法启动的设备连同缺失项一并报出：
 
 ```console
 $ ensp up firewall-hrp.topo
@@ -140,13 +140,13 @@ error: topology uses devices this eNSP installation cannot start:
 This is not a bug in the topology: eNSP opens it, renders it, then quits. ...
 ```
 
-`ensp preset ... --topo` 生成文件时也会给出同样的提示，`ensp_build_topology` 的返回值里带 `unsupportedDevices`。检查只读本机文件，不启动 eNSP。设备清单见 [docs/SCENARIOS.md](docs/SCENARIOS.md) 每个场景的“设备镜像”一行。
+`ensp preset ... --topo` 生成文件时给出同样的提示，`ensp_build_topology` 的返回值包含 `unsupportedDevices`。该检查只读取本机文件，不启动 eNSP。各场景的设备清单见 [docs/SCENARIOS.md](docs/SCENARIOS.md) 中的“设备镜像”一行。
 
 ### 窗口遮挡检查
 
-启动设备只能点 eNSP 的工具栏按钮，而合成点击落在**拥有那个像素的窗口**上。别的程序盖住 eNSP 时，鼠标事件全被它接走，eNSP 一条都收不到，结果就是报了一连串成功、然后等一批从未启动的设备。
+启动设备需要点击 eNSP 工具栏按钮，而合成点击由持有该像素的窗口接收。其他程序覆盖 eNSP 时，鼠标事件被该程序接收，eNSP 收不到任何输入。
 
-插件在点击前用 `WindowFromPoint` 查落点属主，不是 eNSP 就不点，直接报：
+插件在点击前通过 `WindowFromPoint` 检查落点归属，不属于 eNSP 则不执行点击：
 
 ```console
 $ ensp up lab.topo
@@ -155,17 +155,23 @@ The mouse events would go to that window, so nothing was clicked.
 Bring eNSP to the front (restore it from the taskbar) and try again.
 ```
 
-标定之前还会扫一张 5×4 的采样网格，任一采样点被外人占住就拒绝开始，因为标定量的是屏幕像素，被遮挡时量到的全是别人的画面。点击后再查一次，防止点击瞬间被抢。
+标定前会以 5×4 采样网格检查窗口可见性，任一采样点被其他窗口占用即停止。标定读取屏幕像素，被遮挡时得到的是其他窗口的画面。点击完成后再次校验落点归属。
 
-插件不能自己把 eNSP 提到前台，这一点值得说清楚，因为它决定了你该怎么用。eNSP 的 exe 要求管理员权限，所以它总以 High 完整性级别运行；普通进程属于 Medium，Windows 的 UIPI 会拦下所有发往高完整性窗口的输入消息（`WM_LBUTTONDOWN` 返回 `err=5`）。提到 High 之后 UIPI 放行，但 Windows 的前台锁仍然不允许一个后台进程改前台（`SetForegroundWindow` 返回 `False`，`AttachThreadInput` 被拒）。两条路都堵着，所以 eNSP 必须由你保持在最上层，并且你在那个桌面上。
+插件无法将 eNSP 窗口提到前台。Windows 仅允许持有前台权限的进程切换前台窗口，跨进程调用 `SetForegroundWindow` 会被拒绝。运行前请将 eNSP 置于最上层。
 
-还有一点：**不要用管理员身份运行本工具**。提权只让 `PrintWindow` 能拍到画布，点击照样进不去，还多过一次 UAC。
+### 运行权限
 
-还有一种情况既不是遮挡也不是坐标：某些执行上下文（服务、计划任务、SSH 会话、agent 沙箱）根本没有输入注入能力。`SendInput` 会被接受并返回成功，但 `GetLastInputInfo` 的 tick 不动，窗口一个事件都收不到。`ensp doctor` 会实测这一点，见下节。
+本工具需要以管理员身份运行。
+
+eNSP 客户端要求管理员权限，始终以高完整性级别运行。Windows 的用户界面特权隔离（UIPI）会丢弃低完整性进程发出的输入消息，模拟点击也在其中。普通权限下 `SendInput` 返回成功但输入队列不变，eNSP 收不到事件，表现为点击无效；以管理员身份启动后可正常注入输入。
+
+管理员权限解决输入注入，不解决窗口置顶。eNSP 仍需保持可见并在最上层。
+
+服务、计划任务、SSH 会话等非交互上下文不具备输入注入能力，提升权限也无法改变。`ensp doctor` 的 `input-injection` 项用于判定当前会话是否可用。
 
 ### 排错自检
 
-启动失败时最费时间的不是修，而是判断该修哪里。`ensp doctor` 把“这台机器能不能跑起来”拆成七项逐条检查，每一项都能独立判定，失败时给一句能照做的修法：
+启动失败时，定位故障项通常比修复本身更耗时。`ensp doctor` 将环境检查拆为七项，逐项判定，失败时给出可执行的修法：
 
 ```console
 $ ensp doctor --topology lab.topo
@@ -176,34 +182,33 @@ $ ensp doctor --topology lab.topo
        fix: Close some applications; devices may boot very slowly or fail to start.
 [ok  ] device-images: AR2220 available
 [FAIL] input-injection: SendInput accepted 2 event(s) but the session last-input tick did not change (session 1, console session 1)
-       fix: This session cannot deliver mouse input, so the eNSP toolbar button can never be
-            pressed. Run the tool from an interactive desktop session ...
+       fix: Run the tool elevated (as administrator) from an interactive desktop session.
 [ok  ] anchors: start (987,226) stop (1049,228)
 ```
 
-它不启动 eNSP，只读本机文件并做一次合成输入探测，所以可以在任何失败之后、任何操作之前随手跑。`--shallow` 跳过较慢的输入探测，`--json` 输出完整结构。对应的工具是 `ensp_doctor`。
+该命令不启动 eNSP，只读取本机文件并执行一次合成输入探测，可在任意失败之后或操作之前运行。`--shallow` 跳过较慢的输入探测，`--json` 输出完整结构。对应工具为 `ensp_doctor`。
 
-判断顺序是固定的：exe 在不在 → VirtualBox 在不在 → 这个拓扑要的镜像齐不齐 → 控制台端口空不空 → 输入能不能进去 → 内存够不够 → 锚点合不合理。卡在哪一项，就只修那一项。
+检查顺序固定：客户端可执行文件、VirtualBox、拓扑所需镜像、控制台端口、输入注入、内存、锚点。定位到哪一项失败，只需修复该项。
 
 ### 验收
 
-配置下发成功不等于实验成功。`ensp_verify` 读 `.topo` 拿到每台设备的控制台端口，逐条执行该场景的验收命令，按输出内容判定，而不是看命令有没有报错：
+配置下发成功不等于实验通过。`ensp_verify` 从 `.topo` 读取各设备的控制台端口，逐条执行该场景的验收命令，按输出内容判定，不依据命令是否报错：
 
 ```console
 $ ensp verify ospf-single --topology lab.topo
-ospf-single — 单区域 OSPF
-(curated checks)
+ospf-single · 单区域 OSPF
+[curated checks]
 [pass] neighbour-full on R1: display ospf peer brief
 [pass] ospf-route on R1: display ip routing-table protocol ospf
 
 accepted: 2/2 checks passed
 ```
 
-约 30 个场景有专门写的断言（OSPF 要 `Full`、BGP 要 `Established`、VRRP 要有 `Master`/`Backup`、MPLS VPN 要有 `Established` 与 VPN 路由表），其余场景回退成“把场景里提到的验证命令都跑一遍”的冒烟检查。判定逻辑在 `src/core/acceptance.mjs` 的 `EXPECTATIONS`，断言支持 `contains`、`notContains`、`matches`、`minLines`。对应的工具是 `ensp_verify`，`ensp_scenario` 会告诉某个场景有没有专门断言。
+约 30 个场景配置了针对性断言（OSPF 需 `Full`、BGP 需 `Established`、VRRP 需 `Master`/`Backup`、MPLS VPN 需 `Established` 与 VPN 路由表），其余场景回退为执行场景内列出的验证命令。判定逻辑位于 `src/core/acceptance.mjs` 的 `EXPECTATIONS`，断言支持 `contains`、`notContains`、`matches`、`minLines`。对应工具为 `ensp_verify`，`ensp_scenario` 会标明某场景是否具有针对性断言。
 
-断言里的设备名按角色对应到你实际的拓扑：蓝图叫 `R1`/`R2`，而下载来的课程作业可能叫 `RA`/`RB`/`RC`，校验时会取第一台有控制台的设备（`R2` 取第二台），不会因为名字不同就报“找不到设备”。
+断言中的设备名按角色映射到实际拓扑：蓝图使用 `R1`/`R2`，课程作业可能使用 `RA`/`RB`/`RC`，校验时取第一台具备控制台的设备（`R2` 取第二台），名称不同不影响判定。
 
-断言不通过时会自己重试，因为路由协议是在命令返回之后才收敛的。`ensp apply` 一结束就验收，OSPF 邻居通常还在 `ExStart` 或 `2-Way`，只取一次快照会把它报成坏的实验。默认给 60 秒（`--wait` 改），通过时会注明等了多久：
+断言不通过时会自动重试。路由协议在命令返回之后才收敛，`ensp apply` 结束后立即验收时，OSPF 邻居通常仍处于 `ExStart` 或 `2-Way`，单次采样会误判为失败。默认等待 60 秒，可通过 `--wait` 调整，通过时注明确切等待时长：
 
 ```console
 $ ensp verify ospf-single --topology lab.topo
@@ -213,9 +218,9 @@ $ ensp verify ospf-single --topology lab.topo
 [pass] neighbour-full on R1: display ospf peer brief (converged after 27s)
 ```
 
-两类失败不进重试循环，因为等下去也不会变好：控制台连不上（设备没启动）和 VRP 拒绝命令（命令写错）。前者直接说 `console unreachable: ... ECONNREFUSED`，后者说 `VRP rejected the command`，都不会伪装成“断言不符”。
+以下两类失败不进入重试循环，重试不会改变结果：控制台不可达（设备未启动）与 VRP 拒绝命令（命令有误）。前者报告 `console unreachable: ... ECONNREFUSED`，后者报告 `VRP rejected the command`，均不伪装为断言不符。
 
-用法上先 `doctor` 再 `up` 再 `verify`：doctor 回答环境行不行，up 回答设备起没起，verify 回答网络通不通。
+推荐顺序为 `doctor`、`up`、`verify`：doctor 判定环境，up 判定设备，verify 判定配置效果。
 
 ## 安装
 
@@ -254,13 +259,15 @@ ensp status
 | 项 | 要求 |
 |---|---|
 | 操作系统 | Windows。eNSP 仅有 Windows 版本 |
-| eNSP | 已安装且可正常运行，需要管理员权限 |
+| eNSP | 已安装且可正常运行 |
 | Node.js | 18 或更高版本 |
-| 权限 | 插件与 eNSP 需处于相同权限级别 |
+| 权限 | 以管理员身份运行本工具与 eNSP，两者需为同一权限级别 |
 
 系统缩放设为 125% 或 150% 时，程序会自行完成坐标换算，不需要手动调分辨率。若 eNSP 升级后按钮位置改变，执行 `ensp probe` 重新标定。
 
 ## 快速开始
+
+在管理员身份下执行（见上文“运行权限”）：
 
 ```bash
 ensp doctor                      # 先确认这台机器能跑起来
@@ -295,7 +302,7 @@ ensp stop
 
 仅自行使用而不对外分发时，上述要求不适用。
 
-未选用 MIT 或 Apache-2.0，是因为这两者允许二次修改后闭源，与"二次修改也须开源"的意愿冲突。
+未选用 MIT 或 Apache-2.0，是因为两者允许二次修改后闭源，与二次修改亦须开源的要求不符。
 
 ### 致谢
 

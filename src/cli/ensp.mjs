@@ -93,7 +93,9 @@ ${C.bold('EXAMPLES')}
   ensp mcp
 
 ${C.bold('NOTES')}
-  · eNSP must be installed and runnable; it requires administrator rights.
+  · eNSP must be installed and runnable. It requires administrator rights.
+  · Run this tool elevated too: a normal-integrity process cannot inject the mouse
+    input that starts devices, and SendInput will silently report success.
   · Starting devices briefly focuses the eNSP window (it has to be clicked),
     then the window is minimised again. Run doctor first if a start does nothing.
   · Readiness is verified per device by polling its console, never by sleeping.

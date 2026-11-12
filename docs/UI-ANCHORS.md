@@ -95,10 +95,10 @@
 | `GetCursorPos` / `SetCursorPos` | `err=203` |
 
 **第二层：前台锁。** 用 `Start-Process -Verb RunAs` 提到 High 之后（本机 UAC 是
-`ConsentPromptBehaviorAdmin=0`，提升不弹窗），UIPI 那层就放行了——`SendMessage` 的 errno 从 5 变成 183，
-`BringWindowToTop` 甚至返回 `True`。但前台窗口仍是别的进程，`SetForegroundWindow` 依然 `False`、
-`SetCursorPos` 依然 `False`。原因是 Windows 的前台锁：只有“当前拥有前台权限”的进程才能改前台，
-一个刚从后台起来的进程没有这个权限，`AttachThreadInput` 也拿不到（`attach=False err=5`）。
+`ConsentPromptBehaviorAdmin=0`，提升不弹窗），UIPI 那层放行，`SendMessage` 的 errno 从 5 变成 183，
+`BringWindowToTop` 返回 `True`。但前台窗口仍是其他进程，`SetForegroundWindow` 依然 `False`、
+`SetCursorPos` 依然 `False`。原因是 Windows 的前台锁：只有持有前台权限的进程才能改前台，
+从后台启动的进程没有该权限，`AttachThreadInput` 也拿不到（`attach=False err=5`）。
 
 已排除“不同窗口站/桌面”：`GetProcessWindowStation()` = `WinSta0`、`GetThreadDesktop()` = `Default`、
 `OpenInputDesktop(0,false,0x0001)` 返回的桌面名也是 `Default`；所有进程 `SessionId` 均为 1，
@@ -108,12 +108,12 @@
 另一条路也堵着：`PrintWindow` 从 Medium 上下文返回全白（`ok=False`），从 High 上下文**能**拍到真画布
 （这是唯一一处提权有实质收益的地方），但拍到画面不等于能把点击送进去。
 
-结论：**eNSP 窗口必须由用户自己保持在最上层，并且用户得在那个桌面上**。插件能做的是尽早、明确、
-可操作地报错，而不是点空了继续等。这也是 `ensp up` 要求“启动时短暂占用前台”的真实原因。
+结论：eNSP 窗口必须由用户自行保持在最上层，并且用户处于那个交互桌面。插件能做的是尽早、
+明确、可操作地报错，而不是点空了继续等。这也是 `ensp up` 要求启动时短暂占用前台的原因。
 
-顺带一条实测结论，用来排除“是不是该提权”：**提权解决不了这件事**。提到 High 只换来
-`PrintWindow` 能拍到画布，点击仍进不去（前台锁），而代价是每次运行都要过一次 UAC
-（本机静默，别人机器不一定）。所以插件不提权，也不建议用户“用管理员身份运行”。
+提权的作用需要与置顶区分开。提到 High 不会让插件取得前台权限，`SetForegroundWindow` 仍然失败，
+所以置顶问题必须由用户解决。但提权是输入注入的前提：Medium 上下文里 `SendInput` 虽然返回成功，
+输入队列却不变，eNSP 收不到点击；以管理员身份运行后输入注入恢复正常。因此本工具需要以管理员身份运行。
 
 ## 设备控制台
 
