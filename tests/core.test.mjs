@@ -859,11 +859,20 @@ test('install paths are found by probing, not by assuming E:', async () => {
 
   // The probe reports what it found and what it tried. It must never throw on a
   // machine where nothing is installed, because `doctor` has to report that.
-  // `probePaths` is the non-throwing form used by doctor: it either reports the
-  // path and where that path came from, or reports that nothing was found.
+  // `probePaths` is the non-throwing form used by doctor, so it has to answer the
+  // same way on every platform: a hit carries the path and where it came from, a
+  // miss carries ok:false and no path. CI runs on Linux, where nothing is found,
+  // and that branch is as important as the hit.
   const found = probePaths({})
   assert.ok('ensp' in found && 'vbox' in found)
-  assert.ok(found.ensp === null || (found.ensp.path && found.ensp.source))
+  for (const entry of [found.ensp, found.vbox]) {
+    if (entry.ok) {
+      assert.ok(entry.path, 'a hit carries a path')
+      assert.ok(entry.source, 'a hit says where the path came from')
+    } else {
+      assert.equal(entry.path, null, 'a miss reports no path')
+    }
+  }
 
   // An explicit path that does not exist must fail loudly. Silently using a
   // different installation is worse than failing: the user pointed at a machine
