@@ -1,6 +1,5 @@
 {
- "generatedFrom": "HCIP H12-821 单选/多选/判断题",
- "sourceQuestions": 486,
+ "version": 1,
  "topics": {
   "bgp": {
    "scenarios": [

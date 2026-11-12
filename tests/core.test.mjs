@@ -934,10 +934,10 @@ test('a scenario brief carries the knowledge for the topic it teaches', async ()
 test('the knowledge generator is deterministic and drops unusable questions', async () => {
   const { buildIndex } = await import('../scripts/gen-knowledge.mjs')
 
-  // A miniature bank covering the three shapes the generator must handle: a
+  // A miniature source covering the three shapes the generator must handle: a
   // multi-key answer that needs its options spelled out, an "which is wrong"
   // question that must be dropped, and one with no machine-readable answer.
-  const bank = [
+  const source = [
     {
       n: 1,
       type: '多选题',
@@ -967,8 +967,7 @@ test('the knowledge generator is deterministic and drops unusable questions', as
     },
   ]
 
-  const index = buildIndex(bank)
-  assert.equal(index.sourceQuestions, 3)
+  const index = buildIndex(source)
   const points = Object.values(index.topics).flatMap((t) => t.points)
   assert.equal(points.length, 1, 'only the usable question survives')
   assert.equal(points[0].n, 1)
@@ -979,5 +978,5 @@ test('the knowledge generator is deterministic and drops unusable questions', as
 
   // Same input, same output: the file is generated, so a churning diff would make
   // every regeneration look like a change.
-  assert.deepEqual(buildIndex(bank), buildIndex(bank))
+  assert.deepEqual(buildIndex(source), buildIndex(source))
 })

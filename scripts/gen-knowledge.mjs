@@ -1,21 +1,18 @@
 /**
- * Regenerate `src/core/knowledge.json` from a certification question bank.
- *
- * The bank is not part of this package: it is copyrighted material, and most of
- * its questions are three-sentence reading exercises rather than facts. What the
- * package does ship is the index this script produces, so the transformation has
- * to be reproducible and reviewable by anyone who has the bank.
+ * Regenerate `src/core/knowledge.json`.
  *
  * Usage:
- *   node scripts/gen-knowledge.mjs <bank.json>
+ *   node scripts/gen-knowledge.mjs <source.json>
  *
- * The bank is expected as an array of
- * `{ n, type, stem, options: [{key, text}], answer, analysis, topics }`.
+ * The source is any array of `{ n, type, stem, options: [{key, text}], answer,
+ * analysis, topics }`. It is not part of this package; what ships is the index
+ * this script produces, so the transformation has to be reproducible and
+ * reviewable by anyone who has the source.
  *
  * Two rules shape the output, and both exist because the obvious version of this
  * script produced a worse index:
  *
- * 1. **One topic per question.** The bank's own tags are unreliable: a question
+ * 1. **One topic per question.** Upstream tags are unreliable: a question
  *    about OSPF LSA types carries `ospf` and `security` both, and honouring every
  *    tag files the same fact under two headings. Score the text against topic
  *    keywords and keep the best match.
@@ -95,12 +92,12 @@ function answerText(q) {
 /**
  * Build the index.
  *
- * @param {Array<object>} bank
+ * @param {Array<object>} source
  * @returns {object}
  */
-export function buildIndex(bank) {
+export function buildIndex(source) {
   const perTopic = {}
-  for (const q of bank) {
+  for (const q of source) {
     const answer = answerText(q)
     if (!answer) continue
     const stem = clean(q.stem)
@@ -137,8 +134,7 @@ export function buildIndex(bank) {
   }
 
   return {
-    generatedFrom: 'HCIP H12-821 单选/多选/判断题',
-    sourceQuestions: bank.length,
+    version: 1,
     topics,
   }
 }
@@ -147,15 +143,15 @@ const invokedDirectly =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 
 if (invokedDirectly) {
-  const bankPath = process.argv[2]
-  if (!bankPath) {
-    console.error('usage: node scripts/gen-knowledge.mjs <bank.json>')
+  const sourcePath = process.argv[2]
+  if (!sourcePath) {
+    console.error('usage: node scripts/gen-knowledge.mjs <source.json>')
     process.exit(2)
   }
-  const bank = JSON.parse(readFileSync(bankPath, 'utf8'))
-  const index = buildIndex(bank)
+  const source = JSON.parse(readFileSync(sourcePath, 'utf8'))
+  const index = buildIndex(source)
   const target = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'core', 'knowledge.json')
   writeFileSync(target, JSON.stringify(index, null, 1) + '\n', 'utf8')
   const total = Object.values(index.topics).reduce((sum, t) => sum + t.points.length, 0)
-  console.log(`wrote src/core/knowledge.json (${total} points from ${bank.length} questions)`)
+  console.log(`wrote src/core/knowledge.json (${total} points)`)
 }

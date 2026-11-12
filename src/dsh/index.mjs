@@ -610,7 +610,8 @@ export function apply(ctx) {
   add(tools, {
     name: 'ensp_knowledge',
     description:
-      'Look up curriculum knowledge derived from a certification question bank: short ' +
+      'Look up curriculum knowledge: short statements about the terms a scenario ' +
+        'exercises, grouped by topic. ' +
       'question/answer pairs filed by topic, and the scenarios that teach each topic. ' +
       'Pass scenario to list what one lab teaches, or query to search the index.',
     parameters: {

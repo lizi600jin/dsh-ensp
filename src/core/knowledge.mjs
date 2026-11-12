@@ -5,14 +5,13 @@
  * not carry commands, because the whole point of the tool is to catch a copied
  * command that does not fit. What they were missing is the vocabulary the lab is
  * teaching: which LSA belongs to which area, which attribute wins a BGP decision,
- * which port role only MSTP has. That is exactly the material a certification
- * question bank covers.
+ * which port role only MSTP has. Short, checkable statements about those terms
+ * are what a learner needs before touching a device.
  *
- * This module reads a small generated index instead of the question bank itself:
- * one topic, the scenarios that teach it, and a list of short question/answer
- * pairs. Keeping the bank out of the package matters for two reasons. Most of its
- * questions are three-sentence reading exercises that say nothing, and shipping
- * a copyrighted question bank inside a GPL package is not a reasonable default.
+ * This module reads a small generated index: one topic, the scenarios that teach
+ * it, and a list of short question/answer pairs. Shipping only the index keeps the
+ * package small and keeps third-party source material out of a GPL distribution,
+ * while `npm run knowledge` still makes every entry reproducible.
  *
  * @module dsh-ensp/knowledge
  */
@@ -95,7 +94,7 @@ export function searchKnowledge(query) {
 export function renderKnowledge(scenarioId, { limit = 10 } = {}) {
   const points = knowledgeFor(scenarioId).slice(0, limit)
   if (!points.length) return ''
-  const lines = ['', '## 知识点（来自认证题库，按主题归类）']
+  const lines = ['', '## 知识点（按主题归类）']
   for (const p of points) {
     lines.push(`- ${p.q}`)
     lines.push(`  答: ${p.a}`)

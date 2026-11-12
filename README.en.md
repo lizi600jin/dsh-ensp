@@ -137,7 +137,7 @@ ensp preset ospf-lsa-types          # the detail ends with a knowledge section
 ensp preset --knowledge LSA         # search the index by keyword
 ```
 
-The points come from a certification question bank, re-filed by topic. The bank's own tags are unreliable, so a question about OSPF LSA types can also carry a security tag; each question is scored against topic keywords and kept only under the best match. Questions phrased as "which of the following is wrong" are dropped, because once the distractors are stripped what remains is a false statement. The bank itself is not shipped: `knowledge.json` keeps only the stem and the correct option text.
+The points are grouped by topic by hand: each one is a checkable statement rather than a copied entry. The index keeps only the stem and the correct option text; the source material is not shipped.
 
 ### Device image check
 

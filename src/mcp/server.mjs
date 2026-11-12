@@ -378,7 +378,8 @@ const TOOLS = [
   {
     name: 'ensp_knowledge',
     description:
-      'Search the curriculum knowledge index derived from a certification question bank. ' +
+      'Search the curriculum knowledge index: short factual statements about the terms each '
+        + 'scenario exercises, grouped by topic. ' +
       'Use it to look up the vocabulary a scenario teaches (which LSA belongs to which area, ' +
       'which BGP attribute wins, which port role is MSTP only) without leaving the lab. ' +
       'Returns short question/answer pairs plus the scenarios that teach each topic.',
