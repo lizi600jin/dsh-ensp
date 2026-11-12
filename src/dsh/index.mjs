@@ -104,6 +104,45 @@ function stripRequired(node) {
 /** Declare a closed output object. */
 const obj = (properties) => compileObject(properties)
 
+/**
+ * Fill in required properties that a return branch omitted.
+ *
+ * A tool has several branches, and some of them legitimately have nothing to
+ * report: when eNSP is not running there is no pid, no hwnd and no anchor. The
+ * consumer still benefits from a stable shape, so the branch does not have to
+ * repeat empty fields and the schema does not have to relax.
+ *
+ * Missing required keys get the empty value for their type. Keys the branch did
+ * return are never touched, so a wrong value still reaches the validator.
+ */
+/**
+ * Fill in the branches a tool did not return.
+ *
+ * Exported so the contract can be tested without calling a device: every tool
+ * declares its full output shape, and a run that legitimately has nothing to say
+ * about one field must still satisfy that shape.
+ */
+export function conform(schema, value) {
+  if (!schema || schema.type !== 'object') return value
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+  const out = { ...value }
+  for (const key of schema.required ?? []) {
+    if (out[key] !== undefined) continue
+    out[key] = emptyFor(schema.properties?.[key])
+  }
+  return out
+}
+
+/** The empty value for a schema node's type. */
+function emptyFor(node) {
+  const type = node?.type
+  if (type === 'number' || type === 'integer') return 0
+  if (type === 'boolean') return false
+  if (type === 'array') return []
+  if (type === 'object') return {}
+  return ''
+}
+
 /** One plain text content block. */
 const text = (value) => [{ type: 'text', text: String(value) }]
 
@@ -121,7 +160,8 @@ function add(tools, definition) {
   return tools.register({
     ...rest,
     async execute(args) {
-      return execute(args ?? {})
+      const value = await execute(args ?? {})
+      return conform(definition.output?.schema, value)
     },
   })
 }

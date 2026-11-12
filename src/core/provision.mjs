@@ -22,9 +22,36 @@
  * @module dsh-ensp/provision
  */
 
-import { openConsole, viewOf } from './console.mjs'
+import { openConsole } from './console.mjs'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Errors that mean "the device is already in the state you asked for".
+ *
+ * Re-running the same configuration is the normal way to work: change one line,
+ * apply again, look at the effect. VRP answers the unchanged lines with an error,
+ * and aborting the batch there makes the tool unusable for that loop. These
+ * specific replies are recorded as no-ops instead. Everything else still stops
+ * the batch, because a genuine rejection means the rest of the script is
+ * probably landing on the wrong object.
+ */
+const IDEMPOTENT_RE =
+  /already exists|The VLAN already exists|address already exists|The object already exists|has already been created|is already configured|The route already exists|The ACL rule already exists/i
+
+/**
+ * Whether a VRP error means "this line is already in effect".
+ *
+ * Exported so the behaviour can be tested without a device: the distinction
+ * between "already there" and "rejected" is the whole point of a re-runnable
+ * apply, and it is easy to widen the pattern until real failures are swallowed.
+ *
+ * @param {string} message
+ * @returns {boolean}
+ */
+export function isIdempotentError(message) {
+  return IDEMPOTENT_RE.test(String(message ?? ''))
+}
 
 /**
  * Split a configuration script into executable lines.
@@ -111,21 +138,21 @@ export async function pushConfig({
       // not. Because we already entered system view above, a leading `system-view`
       // would be rejected ("Unrecognized command") and abort the batch. Treat it as
       // idempotent: skip it when we are already in the right place.
-      if (/^system-view$/i.test(command) && viewOf(session.prompt) === 'system') {
+      if (/^system-view$/i.test(command) && session.view === 'system') {
         applied += 1
         transcript.push({ line, command, ok: true, skipped: 'already in system view', output: '' })
         report?.({ phase: 'command', device, line, command, ok: true, skipped: true })
         continue
       }
       // Likewise `return` from system view is a no-op noise source.
-      if (/^return$/i.test(command) && viewOf(session.prompt) === 'system') {
+      if (/^return$/i.test(command) && session.view === 'system') {
         applied += 1
         transcript.push({ line, command, ok: true, skipped: 'already at top of system view', output: '' })
         report?.({ phase: 'command', device, line, command, ok: true, skipped: true })
         continue
       }
       // Guard against view drift: a previous `quit` may have dropped us out.
-      if (viewOf(session.prompt) === 'user') {
+      if (session.view === 'user') {
         const back = await session.ensureSystemView()
         if (!back.ok) {
           return {
@@ -158,6 +185,15 @@ export async function pushConfig({
         output: result.output.slice(-2000),
       })
       report({ phase: 'command', device, line, command, ok: result.ok, view: result.view })
+
+      if (!result.ok && isIdempotentError(result.error)) {
+        // Already in the requested state. Count it so the totals stay meaningful,
+        // and keep the transcript honest about what the device actually said.
+        applied += 1
+        transcript[transcript.length - 1].skipped = 'already in the requested state'
+        report({ phase: 'command', device, line, command, ok: true, skipped: true, view: result.view })
+        continue
+      }
 
       if (!result.ok) {
         if (stopOnError) {

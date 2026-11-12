@@ -48,8 +48,14 @@
 4. 点击「开启设备」＝ window-relative (660, 59)
 5. 判定启动成功：Get-NetTCPConnection 出现 2000..2100 的监听端口
    （AR1220 约 60~120s；这不是“进程在不在”，是唯一可靠判据）
-6. SW_MINIMIZE 最小化，把桌面还给用户
+6. SW_MINIMIZE 最小化，并把激活交还给最小化之前的那个窗口
 ```
+
+最小化只改窗口状态，不转移激活。`ShowWindow(h, SW_MINIMIZE)` 之后窗口已经 iconic，
+但 `GetForegroundWindow()` 仍然是 eNSP；此时从任务栏点它，第一击会被 Windows 当成
+“修正激活一致性”吞掉，表现为点了没反应、要再点一次。因此最小化后必须显式
+`SetForegroundWindow(previousForeground)`，并在 120ms 后回读确认。
+停止设备同理：点击需要 eNSP 在前台，但用户要的是停止，操作结束后不该把 eNSP 留在前台。
 
 ### 关键纠正（都来自实测，推翻了早期假设）
 

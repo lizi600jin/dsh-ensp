@@ -25,6 +25,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
+import { resolveEnspRoot } from './paths.mjs'
+
 /** Default install root; override with `DSH_ENSP_EXE`'s directory or the `root` option. */
 export const DEFAULT_ENSP_ROOT = 'E:\\Huawei\\eNSP'
 
@@ -107,9 +109,16 @@ function readCatalogue(root) {
   return table
 }
 
-/** Derive the install root from an explicit executable path. */
+/**
+ * Derive the install root from an explicit executable path.
+ *
+ * Falls back to the resolved install root, then to the historical default, so a
+ * caller that has no path at hand still gets a usable directory rather than
+ * silently reading the wrong catalogue.
+ */
 export function rootFromExe(exe) {
-  return exe ? path.dirname(exe) : DEFAULT_ENSP_ROOT
+  if (exe) return path.dirname(exe)
+  return resolveEnspRoot() ?? DEFAULT_ENSP_ROOT
 }
 
 /**

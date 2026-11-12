@@ -195,6 +195,19 @@ export class ConsoleSession {
     return this.#prompt
   }
 
+  /**
+   * The hostname learned from the user-view prompt.
+   *
+   * Internal callers must pass it to `viewOf`. Without it a hostname containing a
+   * dash (`SW2-ACCESS`) makes every system-view prompt look like a sub-view, and
+   * the config engine ends up retrying quit/system-view instead of working.
+   *
+   * @returns {string|null}
+   */
+  get hostname() {
+    return this.#hostname
+  }
+
   /** @returns {'user'|'system'|'sub'|null} */
   get view() {
     return viewOf(this.#prompt, this.#hostname)
@@ -240,16 +253,17 @@ export class ConsoleSession {
    * @param {number} settleMs
    * @returns {Promise<string>} the transcript produced since the buffer was last cleared
    */
-  async #readToPrompt(timeoutMs, settleMs = 60) {
+  async #readToPrompt(timeoutMs, settleMs = 60, echo = null) {
     const started = Date.now()
     while (Date.now() - started < timeoutMs) {
       if (this.#closed) break
       const text = clean(this.#buf)
       // A confirmation question wins over a stale prompt: answer it explicitly.
       if (CONFIRM_RE.test(text.split('\n').slice(-3).join('\n'))) break
+      const sawEcho = !echo || text.includes(echo)
       // A pager stop is a terminal state too: nothing more will arrive until we
       // send a key, so waiting for a prompt here would burn the whole timeout.
-      if (PROMPT_RE.test(text) || PAGER_RE.test(text.trimEnd())) {
+      if (sawEcho && (PROMPT_RE.test(text) || PAGER_RE.test(text.trimEnd()))) {
         const before = this.#buf.length
         await this.#waitUntil(() => this.#buf.length !== before || this.#closed, settleMs)
         if (this.#buf.length === before) break
@@ -257,14 +271,23 @@ export class ConsoleSession {
         // Poll the buffer rather than sleeping a fixed slice: most commands reply
         // in a few milliseconds, and waiting 200 ms per line dominates the runtime
         // of a 300-line config.
-        await this.#waitUntil(() => PROMPT_RE.test(clean(this.#buf)) || PAGER_RE.test(clean(this.#buf).trimEnd()) || this.#closed, 25)
+        await this.#waitUntil(() => {
+          if (this.#closed) return true
+          const now = clean(this.#buf)
+          if (echo && !now.includes(echo)) return false
+          return PROMPT_RE.test(now) || PAGER_RE.test(now.trimEnd())
+        }, 25)
       }
     }
     const text = clean(this.#buf)
     this.#buf = ''
-    const found = text.match(/[<\[][\w~\-./:]*[>\]]\s*$/m) || text.trimEnd().match(/[<\[][\w~\-./:]*[>\]]$/)
-    if (found) {
-      this.#prompt = found[0].trim()
+    // The *last* prompt in the transcript is the current one. Matching with an
+    // `m` anchor and taking the first hit returns a prompt from the middle of the
+    // output, which is how a reply that still carried the previous prompt made the
+    // session believe it stood one view higher than it did.
+    const promptAt = [...text.matchAll(/[<\[][\w~\-./:]*[>\]]/g)].pop()
+    if (promptAt) {
+      this.#prompt = promptAt[0].trim()
       // Learn the hostname the first time we see the user-view prompt; it is the
       // only reliable anchor for telling `[R1-TEST]` (system) from `[R1-TEST-GE0/0/0]`.
       this.#hostname ??= hostnameOf(this.#prompt)
@@ -301,16 +324,11 @@ export class ConsoleSession {
 
     this.#buf = ''
     this.#line(command)
-    let output = await this.#readToPrompt(timeoutMs, entersView ? 200 : 60)
-
-    if (entersView) {
-      // If the echo is missing the device had not finished switching views yet;
-      // give it one more read window rather than moving on.
-      const echoed = output.includes(command.split(/\s+/)[0])
-      if (!echoed) {
-        output += await this.#readToPrompt(timeoutMs, 100)
-      }
-    }
+    // VRP echoes the command before it answers. Requiring that echo makes the
+    // prompt trustworthy: otherwise a prompt left over from the previous command
+    // can satisfy the match and the caller then acts on the wrong view.
+    const echo = command.split(/\s+/)[0]
+    let output = await this.#readToPrompt(timeoutMs, entersView ? 200 : 60, echo)
 
     // Answer at most one confirmation round; `save` and `reset` both use one.
     if (CONFIRM_RE.test(output) && !PROMPT_RE.test(output.trimEnd())) {

@@ -197,13 +197,24 @@ export function twoPcLab({ vlan = 10, subnet = '192.168.10' } = {}) {
 }
 
 /**
- * Switch configuration for {@link twoPcLab}: both ports into one VLAN.
- * @param {{vlan?: number}} [options]
+ * Switch configuration for {@link twoPcLab}: both ports into one VLAN, plus the
+ * matching Vlanif.
+ *
+ * The Vlanif is not decoration. `twoPcLab` gives both PCs a gateway, so a lab
+ * without a Vlanif is a lab whose PCs cannot reach their own gateway, and any
+ * follow-up command that assumes the interface exists (`interface Vlanif10`)
+ * fails with "The VLAN does not exist". Creating the VLAN alone does not create
+ * its interface; VRP only does that when asked.
+ *
+ * @param {{vlan?: number, subnet?: string}} [options]
  */
-export function twoPcLabConfig({ vlan = 10 } = {}) {
+export function twoPcLabConfig({ vlan = 10, subnet = '192.168.10' } = {}) {
   return [
     'system-view',
     `vlan ${vlan}`,
+    ' quit',
+    `interface Vlanif${vlan}`,
+    ` ip address ${subnet}.254 255.255.255.0`,
     ' quit',
     'interface GigabitEthernet0/0/1',
     ' port link-type access',

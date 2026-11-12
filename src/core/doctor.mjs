@@ -21,11 +21,9 @@ import path from 'node:path'
 import { checkTopologySupport, probeDevice } from './compat.mjs'
 import { DEFAULT_ANCHORS, calibrateAnchors } from './calibrate.mjs'
 import { enspPid, locateWindow } from './launcher.mjs'
+import { probePaths, resolveEnspRoot } from './paths.mjs'
 
-export const DEFAULT_ENSP_EXE = 'E:\\Huawei\\eNSP\\eNSP_Client.exe'
-export const DEFAULT_VBOX = 'E:\\VirtualBox\\VBoxManage.exe'
-
-const MIN_FREE_MEMORY_MB = 1024
+export const MIN_FREE_MEMORY_MB = 1024
 
 /** PowerShell helper that answers "does synthetic input reach this session?". */
 const INPUT_PROBE = String.raw`
@@ -172,33 +170,39 @@ function check(id, status, detail, fix) {
  * @param {boolean} [options.deep]   also run the input probe (slow: ~2 s)
  */
 export function doctor(options = {}) {
-  const exe = options.exe || DEFAULT_ENSP_EXE
-  const vbox = options.vbox || DEFAULT_VBOX
-  const root = options.root || path.dirname(exe)
+  const found = probePaths({ exe: options.exe, vbox: options.vbox })
+  const exe = found.ensp.path
+  const vbox = found.vbox.path
+  const root = options.root || resolveEnspRoot({ exe })
   const deep = options.deep !== false
   const checks = []
 
   // 1. eNSP client present
-  const exeOk = fs.existsSync(exe)
+  const exeOk = Boolean(exe) && fs.existsSync(exe)
   checks.push(
     check(
       'ensp-installed',
       exeOk ? 'pass' : 'fail',
-      exeOk ? exe : `not found: ${exe}`,
+      exeOk ? exe : 'not found in any configured or default location',
       exeOk
         ? undefined
-        : 'Install eNSP, or pass --exe with the real path to eNSP_Client.exe.',
+        : 'Install eNSP, or pass --exe with the full path to eNSP_Client.exe, '
+          + 'or set DSH_ENSP_EXE. Both the default install root and the Windows '
+          + 'install registry were checked.',
     ),
   )
 
   // 2. VirtualBox present (eNSP cannot boot a single device without it)
-  const vboxOk = fs.existsSync(vbox)
+  const vboxOk = Boolean(vbox) && fs.existsSync(vbox)
   checks.push(
     check(
       'virtualbox',
       vboxOk ? 'pass' : 'fail',
-      vboxOk ? vbox : `not found: ${vbox}`,
-      vboxOk ? undefined : 'Install VirtualBox 5.2.x, which ships with eNSP.',
+      vboxOk ? vbox : 'not found in PATH or any default location',
+      vboxOk
+        ? undefined
+        : 'Install VirtualBox 5.2.x, which ships with eNSP, or pass --vbox with '
+          + 'the full path to VBoxManage.exe, or set DSH_VBOX.',
     ),
   )
 
@@ -366,4 +370,3 @@ export function modelsOf(topology) {
 }
 
 /** Free-memory constant, exported so tests can assert against it. */
-export { MIN_FREE_MEMORY_MB }

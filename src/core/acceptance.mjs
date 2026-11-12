@@ -34,8 +34,26 @@ import { readTopology } from './topology.mjs'
  */
 export const EXPECTATIONS = {
   'vlan-access': [
-    { id: 'vlans-exist', on: 'SW1', command: 'display vlan', expect: { minLines: 3 } },
-    { id: 'port-in-vlan', on: 'SW1', command: 'display port vlan active', expect: { contains: 'U' } },
+    // `minLines: 3` used to stand here, but a switch that has never been
+    // configured already lists VLAN 1, so it passed on a blank device. An
+    // untagged member alone is not enough either: every port starts as an
+    // untagged member of VLAN 1. What proves the lab is a member of a VLAN other
+    // than 1.
+    {
+      id: 'port-in-configured-vlan',
+      on: 'SW1',
+      command: 'display vlan',
+      expect: { matches: /^(?!\s*1\s)(\d+)\s+common[^\n]*UT:GE\d\/0\/\d+\(U\)/m },
+    },
+    // `contains: 'U'` matched the table header `U: Up;` and the `UT:` prefix, so
+    // it proved nothing either. Two access ports must carry the same non-default
+    // VLAN, which is what puts the two PCs in one broadcast domain.
+    {
+      id: 'access-ports-share-vlan',
+      on: 'SW1',
+      command: 'display port vlan active',
+      expect: { matches: /GE\d\/0\/\d+\s+access\s+(?!1\s)(\d+)[\s\S]{0,600}?GE\d\/0\/\d+\s+access\s+\1/ },
+    },
   ],
   'trunk-interconnect': [
     { id: 'trunk-up', on: 'SW1', command: 'display interface brief | include up', expect: { minLines: 2 } },

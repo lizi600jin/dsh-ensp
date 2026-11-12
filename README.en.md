@@ -61,7 +61,9 @@ eNSP allows only one instance. An abnormal exit can leave a zombie process with 
 
 ### Push configuration
 
-Sends one command at a time and waits for the prompt after each. The first error aborts the batch and reports the line, the command and the device's raw output.
+Sends one command at a time and waits for the prompt after each. A prompt only counts once the echo of that command has arrived, so output still draining from the previous command cannot decide the current view. The first error aborts the batch and reports the line, the command and the device's raw output.
+
+A line the device answers with "already exists" (`address already exists`, `VLAN already exists`, `route already exists` and similar) is recorded as skipped rather than failed. Editing one line and re-running is the common loop, and stopping on those lines means the script never reaches the line that actually changed. Every other error still aborts, because a genuine rejection usually means the following lines land on the wrong object.
 
 ```js
 import { pushConfig } from 'dsh-ensp'
@@ -262,6 +264,8 @@ ensp status
 | eNSP | Installed and working |
 | Node.js | 18 or newer |
 | Privileges | Run both this tool and eNSP as administrator, at the same integrity level |
+
+The eNSP and VirtualBox install locations are detected automatically: `--exe` / `--vbox` first, then the `DSH_ENSP_EXE` / `DSH_VBOX` environment variables, then the `HKLM\SOFTWARE\Huawei\eNSP` registry key, then the usual install roots and `PATH`. Nothing needs configuring when either is installed on another drive, and a failed lookup lists every location it tried together with where that location came from.
 
 At 125% or 150% display scaling the tool converts coordinates itself, so no resolution change is needed. If an eNSP upgrade moves the buttons, run `ensp probe` to re-calibrate.
 

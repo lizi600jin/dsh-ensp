@@ -76,6 +76,8 @@ ${C.bold('OPTIONS')}
   --wait MS         verify: how long a failing assertion may keep being retried (default 60000)
   --topo PATH       write the scenario's topology blueprint to a .topo file
   --topology PATH   the .topo file that is running (doctor, verify)
+  --exe PATH        full path to eNSP_Client.exe (default: auto-detect via registry and install roots)
+  --vbox PATH       full path to VBoxManage.exe (default: auto-detect via PATH and install roots)
   --shallow         doctor: skip the input-injection probe
   --json            machine-readable output
   -h, --help        show this help
@@ -86,6 +88,7 @@ ${C.bold('EXAMPLES')}
   ensp verify ospf-single --topology lab.topo
   ensp apply ./configs --topology lab.topo --save
   ensp status --topology lab.topo
+  ensp up lab.topo --exe "C:/Program Files/Huawei/eNSP/eNSP_Client.exe"
   ensp probe
   ensp preset --search ospf
   ensp preset ospf-single
@@ -518,6 +521,10 @@ async function cmdVerify({ positional, flags }) {
 // ------------------------------------------------------------------------- main
 async function main() {
   const { verb, positional, flags } = parseArgs(process.argv.slice(2))
+  // --exe and --vbox are global: every verb that launches or inspects eNSP has
+  // to see the same install, and the launcher reads these variables anyway.
+  if (flags.exe) process.env.DSH_ENSP_EXE = String(flags.exe)
+  if (flags.vbox) process.env.DSH_VBOX = String(flags.vbox)
   if (!verb || flags.help) {
     console.log(HELP)
     return flags.help && !verb ? 0 : 2

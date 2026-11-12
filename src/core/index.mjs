@@ -69,8 +69,6 @@ export {
   freeMemoryMb,
   busyConsolePorts,
   modelsOf,
-  DEFAULT_ENSP_EXE,
-  DEFAULT_VBOX,
   MIN_FREE_MEMORY_MB,
 } from './doctor.mjs'
 
@@ -124,3 +122,12 @@ export {
   renderScenario,
   searchScenarios,
 } from './presets.mjs'
+
+export {
+  resolveEnspExe,
+  resolveVBoxManage,
+  resolveEnspRoot,
+  probePaths,
+  enspCandidates,
+  vboxCandidates,
+} from './paths.mjs'

@@ -11,16 +11,20 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-import { viewOf, hostnameOf, hasPagerMarker } from '../src/core/console.mjs'
-import { parseScript } from '../src/core/provision.mjs'
+import { conform } from '../src/dsh/index.mjs'
+
+import { EventEmitter } from 'node:events'
+
+import { ConsoleSession, viewOf, hostnameOf, hasPagerMarker } from '../src/core/console.mjs'
+import { parseScript, isIdempotentError } from '../src/core/provision.mjs'
 import {
   interfaceName,
   interfaceIndex,
   parseTopology,
   serialiseTopology,
 } from '../src/core/topology.mjs'
-import { buildTopology, twoPcLab, MODEL_SPECS, vrpToFlatIndex } from '../src/core/build.mjs'
-import { planFor, resolveDevice, hasChecks } from '../src/core/acceptance.mjs'
+import { buildTopology, twoPcLab, twoPcLabConfig, MODEL_SPECS, vrpToFlatIndex } from '../src/core/build.mjs'
+import { planFor, resolveDevice, hasChecks, evaluateAssertion } from '../src/core/acceptance.mjs'
 
 test('viewOf: hostnames containing hyphens are still system view', () => {
   // Real failure: `[R1-TEST]` was classified as a sub-view because it contains a
@@ -655,4 +659,218 @@ test('curated checks follow the devices a foreign topology actually has', async 
   assert.equal(plan.source, 'curated')
   assert.equal(hasChecks('rip'), true)
   assert.deepEqual([...new Set(plan.checks.map((c) => c.on))], ['RA'], 'checks land on the first device by natural order')
+})
+
+// ---------------------------------------------------------------------------
+// Regressions for the six defects reported from a second machine
+// (dsh-ensp-问题报告.md). Each test pins the symptom, not the implementation.
+// ---------------------------------------------------------------------------
+
+test('a system-view prompt with a dashed hostname is not mistaken for a sub-view', () => {
+  // Reported symptom: the config engine kept issuing quit/system-view against a
+  // device named `SW2-ACCESS`, so commands landed one view too high. Without a
+  // known hostname the punctuation-only guess sees a dash and says "sub-view".
+  assert.equal(viewOf('[SW2-ACCESS]', 'SW2-ACCESS'), 'system')
+  assert.equal(viewOf('[SW2-ACCESS-GigabitEthernet0/0/1]', 'SW2-ACCESS'), 'sub')
+  assert.equal(viewOf('[CORE-01]', 'CORE-01'), 'system')
+  assert.equal(viewOf('[R1-TEST]', 'R1-TEST'), 'system')
+  // The hostname is recoverable from the user-view prompt, which is how the
+  // session learns it before it has to judge a bracketed prompt.
+  assert.equal(hostnameOf('<SW2-ACCESS>'), 'SW2-ACCESS')
+  assert.equal(hostnameOf('[SW2-ACCESS-GigabitEthernet0/0/1]'), 'SW2-ACCESS')
+})
+
+test('the console session only accepts a prompt after the command echo', () => {
+  // Reported symptom: `apply` printed 16/16 while Vlanif10 was never created.
+  // A prompt left over from the previous command satisfied the prompt match, so
+  // the caller read a stale view and the next command went into a sub-view.
+  const source = readFileSync(new URL('../src/core/console.mjs', import.meta.url), 'utf8')
+  assert.match(source, /#readToPrompt\(timeoutMs, settleMs = 60, echo = null\)/, 'echo parameter must exist')
+  assert.match(source, /const sawEcho = !echo \|\| text\.includes\(echo\)/, 'prompt match must require the echo')
+  assert.match(source, /const echo = command\.split\(/, 'exec must derive the echo from the command')
+  // The old soft retry is gone: it read one more window and moved on regardless.
+  assert.ok(!/if \(!echoed\) \{/.test(source), 'the soft echo retry must not come back')
+})
+
+test('re-running a configuration treats "already exists" as a no-op, not a failure', () => {
+  // Reported symptom: the second `apply` always stopped at the first IP address
+  // or VLAN with "already exists", which makes the normal edit-and-rerun loop
+  // impossible.
+  assert.equal(isIdempotentError('Error: The address already exists.'), true)
+  assert.equal(isIdempotentError('Error: The VLAN already exists.'), true)
+  assert.equal(isIdempotentError('Error: The route already exists.'), true)
+  // A genuine rejection must still stop the batch, otherwise real mistakes hide.
+  assert.equal(isIdempotentError("Error: Unrecognized command found at '^' position."), false)
+  assert.equal(isIdempotentError('Error: Wrong parameter found at ^ position.'), false)
+  assert.equal(isIdempotentError(''), false)
+  assert.equal(isIdempotentError(null), false)
+})
+
+test('the two-PC preset creates the gateway interface the PCs point at', () => {
+  // Reported symptom: `interface Vlanif20` failed with "The VLAN does not exist"
+  // because the preset created the VLAN but never its Vlanif, while the topology
+  // gave both PCs a gateway on that subnet.
+  const topo = twoPcLab({ vlan: 10, subnet: '192.168.10' })
+  const config = twoPcLabConfig({ vlan: 10, subnet: '192.168.10' })
+  assert.match(config, /^vlan 10$/m)
+  assert.match(config, /^interface Vlanif10$/m, 'the VLAN needs its interface')
+  assert.match(config, /^ ip address 192\.168\.10\.254 255\.255\.255\.0$/m)
+  // Every PC gateway must be an address the config actually assigns.
+  const gateways = topo.devices
+    .map((d) => /-simpc_gateway\s+(\S+)/.exec(d.settings ?? '')?.[1])
+    .filter((g) => g && g !== '0.0.0.0')
+  assert.ok(gateways.length >= 2, 'the preset gives both PCs a gateway')
+  for (const gateway of gateways) assert.ok(config.includes(gateway), `gateway ${gateway} is configured`)
+})
+
+test('the vlan-access checks fail on a switch that was never configured', () => {
+  // Reported symptom: the checks passed on a blank device. `minLines: 3` was
+  // satisfied by VLAN 1 alone, and `contains: 'U'` matched the header `U: Up;`.
+  const inVlan = { matches: /^(?!\s*1\s)(\d+)\s+common[^\n]*UT:GE\d\/0\/\d+\(U\)/m }
+  // A blank switch already lists VLAN 1 with both ports untagged, which is what
+  // the reported check let through.
+  const blank = '1    common  default  UT:GE0/0/1(U)   GE0/0/2(U)\n'
+  assert.equal(evaluateAssertion(blank, inVlan).pass, false, 'VLAN 1 alone is not a configured lab')
+
+  const configured = '1    common  default\n10   common  default  UT:GE0/0/1(U)   GE0/0/2(U)\n'
+  assert.equal(evaluateAssertion(configured, inVlan).pass, true)
+
+  const header = 'U: Up;  D: Down;  TG: Tagged;  UT: Untagged;\nGE0/0/1  access  1  U: 1\nGE0/0/2  access  1  U: 1'
+  assert.equal(evaluateAssertion(header, { contains: 'U' }).pass, true, 'the old check proves the point: it matches the legend')
+})
+
+test('every DSH tool output satisfies its own schema on an empty branch', () => {
+  // Reported symptom: all 14 tools returned INVALID_TOOL_OUTPUT because branches
+  // that returned nothing left required keys missing. `conform` fills those keys
+  // with the empty value for their type, and must never overwrite a real value.
+  const schema = {
+    type: 'object',
+    required: ['device', 'ok', 'count', 'items', 'detail', 'error'],
+    properties: {
+      device: { type: 'string' },
+      ok: { type: 'boolean' },
+      count: { type: 'number' },
+      items: { type: 'array' },
+      detail: { type: 'object' },
+      error: { type: 'string' },
+    },
+  }
+  assert.deepEqual(conform(schema, { device: 'SW1', ok: true }), {
+    device: 'SW1',
+    ok: true,
+    count: 0,
+    items: [],
+    detail: {},
+    error: '',
+  })
+  // A branch that did return a value keeps it, including a failure description.
+  const reported = conform(schema, { device: 'SW1', ok: false, error: 'boom' })
+  assert.equal(reported.ok, false)
+  assert.equal(reported.error, 'boom')
+  // Values that are not objects pass through untouched.
+  assert.equal(conform(schema, 'plain'), 'plain')
+  assert.equal(conform(null, 7), 7)
+})
+
+test('exec ignores a prompt that arrived before its own command echo', async () => {
+  // The reported defect, reproduced without a device. `apply` sent `system-view`,
+  // got an answer whose prompt belonged to the *previous* command, decided it was
+  // in a sub-view, and sent `quit`; every following line then went one view too
+  // high while the batch still reported success.
+  class FakeSocket extends EventEmitter {
+    setEncoding() {}
+    destroy() {}
+    write(text) {
+      this.sent.push(text)
+      this.onWrite?.(text)
+    }
+    constructor() {
+      super()
+      this.sent = []
+    }
+  }
+
+  const socket = new FakeSocket()
+  const session = new ConsoleSession(socket, 'SW2-ACCESS')
+  session.prime = async () => '<SW2-ACCESS>'
+
+  // First command: the reply is the old prompt alone, then the real answer.
+  socket.onWrite = (text) => {
+    if (!/^vlan 10\r$/.test(text)) return
+    // A leftover prompt from an earlier command reaches us first. It is a
+    // sub-view prompt, and taking it seriously is exactly the bug.
+    setTimeout(() => socket.emit('data', '[SW2-ACCESS-GigabitEthernet0/0/1]'), 5)
+    setTimeout(() => socket.emit('data', '\r\nvlan 10\r\n[SW2-ACCESS]'), 25)
+  }
+
+  const result = await session.exec('vlan 10', { timeoutMs: 3000 })
+  assert.equal(result.prompt, '[SW2-ACCESS]', 'the prompt must come from this command, not the previous one')
+  assert.equal(result.view, 'system', 'a dashed hostname in system view is not a sub-view')
+  assert.match(result.output, /vlan 10/, 'the transcript keeps the echo')
+})
+
+test('exec accepts a reply whose echo and prompt arrive in one chunk', async () => {
+  // The fast path: VRP often writes echo and prompt together. The echo guard must
+  // not turn that into a timeout.
+  class FakeSocket extends EventEmitter {
+    setEncoding() {}
+    destroy() {}
+    write(text) {
+      if (/^quit\r$/.test(text)) setImmediate(() => this.emit('data', 'quit\r\n[SW2-ACCESS]'))
+    }
+  }
+  const session = new ConsoleSession(new FakeSocket(), 'SW2-ACCESS')
+  session.prime = async () => '[SW2-ACCESS-Vlanif10]'
+  const result = await session.exec('quit', { timeoutMs: 3000 })
+  assert.equal(result.prompt, '[SW2-ACCESS]')
+  assert.equal(result.view, 'system')
+})
+
+test('install paths are found by probing, not by assuming E:', async () => {
+  // Reported symptom: the tool hard-coded `E:\Huawei\eNSP\eNSP_Client.exe`, so on
+  // a machine with `C:\Program Files\Huawei\eNSP` every launch failed with
+  // `Start-Process : 系统找不到指定的文件`.
+  const { enspCandidates, vboxCandidates, probePaths, resolveEnspExe } = await import('../src/core/paths.mjs')
+
+  const ensp = enspCandidates('D:/somewhere/eNSP_Client.exe')
+  assert.equal(ensp[0].path, 'D:/somewhere/eNSP_Client.exe', 'an explicit path is tried first')
+  assert.equal(ensp[0].source, 'override')
+  assert.ok(
+    ensp.some((c) => /^C:[\\/]Program Files[\\/]Huawei[\\/]eNSP/i.test(c.path)),
+    'the default Program Files location is tried',
+  )
+  assert.ok(ensp.length >= 4, 'several candidates, so one wrong guess does not end the search')
+
+  // The environment variable is the documented escape hatch for a non-standard
+  // install, so it has to appear in the list when set.
+  const saved = process.env.DSH_ENSP_EXE
+  try {
+    process.env.DSH_ENSP_EXE = 'D:/custom/eNSP_Client.exe'
+    const withEnv = enspCandidates()
+    assert.equal(withEnv[0].source, 'DSH_ENSP_EXE')
+    assert.equal(withEnv[0].path, 'D:/custom/eNSP_Client.exe')
+  } finally {
+    if (saved === undefined) delete process.env.DSH_ENSP_EXE
+    else process.env.DSH_ENSP_EXE = saved
+  }
+
+  const vbox = vboxCandidates()
+  assert.ok(vbox.some((c) => /VBoxManage\.exe$/i.test(c.path)))
+
+  // The probe reports what it found and what it tried. It must never throw on a
+  // machine where nothing is installed, because `doctor` has to report that.
+  // `probePaths` is the non-throwing form used by doctor: it either reports the
+  // path and where that path came from, or reports that nothing was found.
+  const found = probePaths({})
+  assert.ok('ensp' in found && 'vbox' in found)
+  assert.ok(found.ensp === null || (found.ensp.path && found.ensp.source))
+
+  // An explicit path that does not exist must fail loudly. Silently using a
+  // different installation is worse than failing: the user pointed at a machine
+  // and would be told the opposite of the truth.
+  assert.throws(
+    () => resolveEnspExe('D:/definitely/not/here/eNSP_Client.exe'),
+    /does not exist/,
+    'a wrong explicit path is reported, not replaced by a guess',
+  )
 })

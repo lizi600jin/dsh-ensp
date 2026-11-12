@@ -35,6 +35,7 @@ import path from 'node:path'
 
 import { calibrateAnchors, DEFAULT_ANCHORS } from './calibrate.mjs'
 import { checkTopologySupport, describeBlocked, rootFromExe } from './compat.mjs'
+import { resolveEnspExe } from './paths.mjs'
 import { readTopology } from './topology.mjs'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -301,7 +302,7 @@ export function enspPids() {
  * @returns {Promise<{pid: number, hwnd: string}>}
  */
 export async function launchEnsp({ topology, exspPath, readyTimeoutMs = 120000 } = {}) {
-  const exe = exspPath ?? process.env.DSH_ENSP_EXE ?? 'E:\\Huawei\\eNSP\\eNSP_Client.exe'
+  const exe = resolveEnspExe(exspPath).path
   const target = topology ? path.resolve(topology) : null
 
   // Reject topologies whose devices have no installed image *before* starting the
@@ -469,7 +470,7 @@ $p = Start-Process -FilePath '${exe.replace(/'/g, "''")}'${topology ? ` -Argumen
  * @param {string} topology
  */
 function reopenTopology(topology) {
-  const exe = process.env.DSH_ENSP_EXE ?? 'E:\\Huawei\\eNSP\\eNSP_Client.exe'
+  const exe = resolveEnspExe().path
   startDetached(exe, topology)
 }
 
@@ -592,14 +593,86 @@ Start-Sleep -Milliseconds 250
 }
 
 /**
- * Minimise the eNSP window, handing the desktop back to the user.
- * @param {string} hwnd
+ * The window handle that currently holds the foreground, or null.
+ *
+ * Captured before eNSP is raised so it can be handed back afterwards.
+ *
+ * @returns {string|null}
  */
-export function minimiseEnsp(hwnd) {
-  runPowerShell(
-    `[EnspWin]::ShowWindow([IntPtr]::new([int64]${hwnd}), 6) | Out-Null; 'ok'`,
+export function foregroundWindow() {
+  const r = runPowerShell(
+    `$h = [EnspWin]::GetForegroundWindow()
+([int64]$h).ToString()`,
     { timeoutMs: 15000 },
   )
+  const raw = (r.stdout || '').trim().split(/\s+/).pop()
+  if (!raw || raw === '0') return null
+  return raw
+}
+
+/**
+ * Put the foreground back on a previously active window.
+ *
+ * Used after a click that had to raise eNSP: leaving eNSP in front is a
+ * side effect the caller did not ask for. The window state is not touched, so a
+ * visible topology stays visible.
+ *
+ * @param {string|null} hwnd
+ * @returns {boolean} whether the foreground moved back
+ */
+export function restoreForeground(hwnd) {
+  if (!hwnd) return false
+  const r = runPowerShell(
+    `$prev = [IntPtr]::new([int64]${hwnd})
+$ok = [EnspWin]::SetForegroundWindow($prev)
+Start-Sleep -Milliseconds 120
+($ok -and ([EnspWin]::GetForegroundWindow() -eq $prev)).ToString()`,
+    { timeoutMs: 15000 },
+  )
+  return r.ok && (r.stdout || '').trim().split(/\s+/).pop() === 'True'
+}
+
+/**
+ * Minimise the eNSP window, handing the desktop back to the user.
+ *
+ * `ShowWindow(SW_MINIMIZE)` minimises without moving the activation: the window
+ * is iconic but still holds the foreground, and Windows then treats the first
+ * taskbar click as an activation correction, so the window appears not to come
+ * back. Restoring the previous foreground window after minimising keeps the
+ * taskbar behaviour standard.
+ *
+ * @param {string} hwnd
+ * @param {{previousForeground?: string|null}} [options]
+ * @returns {{iconic: boolean, handedBack: boolean, foreground: string|null}}
+ */
+export function minimiseEnsp(hwnd, options = {}) {
+  const previous = options.previousForeground ?? null
+  const r = runPowerShell(
+    `
+$h = [IntPtr]::new([int64]${hwnd})
+[EnspWin]::ShowWindow($h, 6) | Out-Null
+Start-Sleep -Milliseconds 150
+$fg = [EnspWin]::GetForegroundWindow()
+$iconic = [EnspWin]::IsIconic($h)
+$back = $false
+if ($iconic -and $fg -eq $h) {
+  $prev = $null
+  ${previous ? `$prev = [IntPtr]::new([int64]${previous})` : ''}
+  if ($prev -ne $null -and $prev -ne [IntPtr]::Zero) {
+    $back = [EnspWin]::SetForegroundWindow($prev)
+  }
+  $fg = [EnspWin]::GetForegroundWindow()
+  if ($fg -eq $h) { $back = $false }
+}
+"ICONIC=$iconic FOREGROUND=" + ([int64]$fg).ToString() + " BACK=$back"
+`,
+    { timeoutMs: 20000 },
+  )
+  const text = r.stdout || ''
+  const iconic = /ICONIC=True/i.test(text)
+  const handedBack = /BACK=True/i.test(text)
+  const m = /FOREGROUND=(-?\d+)/.exec(text)
+  return { iconic, handedBack, foreground: m ? m[1] : null }
 }
 
 /**
@@ -820,6 +893,8 @@ export async function startAllDevices({
   // Doing it the other way round reports the window that was on top a moment ago
   // (usually the terminal that launched us) as if it were a permanent blocker.
   report({ phase: 'focus', hwnd })
+  // Remember who had the foreground so the minimised eNSP does not keep it.
+  const previousForeground = minimise ? foregroundWindow() : null
   let focused = focusEnsp(hwnd)
   if (focused) await new Promise((resolve) => setTimeout(resolve, 300))
 
@@ -867,8 +942,8 @@ export async function startAllDevices({
 
   // Hand the desktop back immediately; boot continues without the window.
   if (minimise) {
-    minimiseEnsp(hwnd)
-    report({ phase: 'minimised' })
+    const handback = minimiseEnsp(hwnd, { previousForeground })
+    report({ phase: 'minimised', ...handback })
   }
 
   report({ phase: 'wait', devices: targets.length })
@@ -909,7 +984,12 @@ export function stopAllDevices(hwnd, options = {}) {
       anchors = { ...DEFAULT_ANCHORS, method: 'default', detail: {} }
     }
   }
+  const previousForeground = foregroundWindow()
   const focused = focusEnsp(hwnd)
   const result = clickToolbar(hwnd, { button: 'stop', anchors })
-  return { focused, anchors, ...result }
+  // The click needs eNSP in front, but leaving it there surprises the user who
+  // asked for a stop: hand the foreground back without touching the window
+  // state, so the topology stays visible while the devices power down.
+  const handback = restoreForeground(previousForeground)
+  return { focused, anchors, handback, ...result }
 }
