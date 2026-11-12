@@ -35,6 +35,7 @@ import { doctor, formatDoctor, modelsOf } from '../core/doctor.mjs'
 import { runAcceptance, formatAcceptance, hasChecks, planFor } from '../core/acceptance.mjs'
 import { pushConfig } from '../core/provision.mjs'
 import { SCENARIOS, SCENARIO_IDS, byLevel, renderScenario, searchScenarios } from '../core/presets.mjs'
+import { knowledgeFor, renderKnowledge, searchKnowledge } from '../core/knowledge.mjs'
 import {
   LAB_IDS,
   buildScenarioTopology,
@@ -320,6 +321,23 @@ async function cmdStatus({ flags }) {
 async function cmdPreset({ positional, flags }) {
   const id = positional[0]
 
+  if (flags.knowledge) {
+    const hits = searchKnowledge(String(flags.knowledge))
+    if (flags.json) {
+      console.log(JSON.stringify(hits, null, 2))
+      return hits.length ? 0 : 1
+    }
+    if (!hits.length) {
+      console.log(C.yellow('no knowledge point matched') + ` "${flags.knowledge}"`)
+      return 1
+    }
+    for (const h of hits) {
+      console.log(`${C.bold('#' + h.n)} ${C.dim('[' + h.topic + ']')} ${h.q}`)
+      console.log(`   答: ${h.a}`)
+    }
+    return 0
+  }
+
   if (flags.search) {
     const hits = searchScenarios(String(flags.search))
     if (flags.json) {
@@ -392,7 +410,10 @@ async function cmdPreset({ positional, flags }) {
     }
 
     const text = renderScenario(id)
-    console.log(flags.json ? JSON.stringify(SCENARIOS[id], null, 2) : text)
+    const points = knowledgeFor(id)
+    console.log(flags.json ? JSON.stringify({ ...SCENARIOS[id], knowledge: points }, null, 2) : text)
+    const knowledge = renderKnowledge(id)
+    if (knowledge) console.log(knowledge)
     if (hasLab(id)) {
       console.log(C.dim(`\n可生成拓扑: ensp preset ${id} --topo ${id}.topo`))
     }

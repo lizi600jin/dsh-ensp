@@ -124,6 +124,13 @@ export {
 } from './presets.mjs'
 
 export {
+  knowledgeTopics,
+  knowledgeFor,
+  searchKnowledge,
+  renderKnowledge,
+} from './knowledge.mjs'
+
+export {
   resolveEnspExe,
   resolveVBoxManage,
   resolveEnspRoot,

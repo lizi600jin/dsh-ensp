@@ -128,6 +128,17 @@ npm run docs          # regenerate docs/SCENARIOS.md
 npm run docs:check    # check whether it is stale
 ```
 
+### Knowledge points
+
+A scenario gives direction, not commands, so the vocabulary of the lab has to come from somewhere. `src/core/knowledge.json` holds knowledge points filed by topic: each scenario ends with a few question-and-answer pairs on the same subject, covering things like which LSA belongs to which area, which attribute decides a BGP path, and which port role only MSTP has.
+
+```bash
+ensp preset ospf-lsa-types          # the detail ends with a knowledge section
+ensp preset --knowledge LSA         # search the index by keyword
+```
+
+The points come from a certification question bank, re-filed by topic. The bank's own tags are unreliable, so a question about OSPF LSA types can also carry a security tag; each question is scored against topic keywords and kept only under the best match. Questions phrased as "which of the following is wrong" are dropped, because once the distractors are stripped what remains is a false statement. The bank itself is not shipped: `knowledge.json` keeps only the stem and the correct option text.
+
 ### Device image check
 
 Some models have a catalogue entry without a shipped image, most notably `USG6000V` (its component has to be selected during eNSP installation). Such models can be placed on the canvas and saved to a `.topo`, but eNSP renders the topology and then quits, which shows up as consoles that never answer.
@@ -254,7 +265,7 @@ ensp status
 }
 ```
 
-14 tools are provided: `ensp_status`, `ensp_build_topology`, `ensp_open`, `ensp_start`, `ensp_stop`, `ensp_apply`, `ensp_apply_dir`, `ensp_query`, `ensp_probe`, `ensp_doctor`, `ensp_verify`, `ensp_scenarios`, `ensp_scenario` and `ensp_preset_config`.
+15 tools are provided: `ensp_status`, `ensp_build_topology`, `ensp_open`, `ensp_start`, `ensp_stop`, `ensp_apply`, `ensp_apply_dir`, `ensp_query`, `ensp_probe`, `ensp_doctor`, `ensp_verify`, `ensp_scenarios`, `ensp_scenario`, `ensp_knowledge` and `ensp_preset_config`.
 
 ## Requirements
 

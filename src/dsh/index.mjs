@@ -48,6 +48,7 @@ import { pushConfig, pushConfigMany, queryDevice } from '../core/provision.mjs'
 import { SCENARIOS, SCENARIO_IDS, renderScenario, searchScenarios, byLevel } from '../core/presets.mjs'
 import { doctor, modelsOf } from '../core/doctor.mjs'
 import { runAcceptance, hasChecks } from '../core/acceptance.mjs'
+import { knowledgeFor, searchKnowledge, knowledgeTopics, renderKnowledge } from '../core/knowledge.mjs'
 import { VERSION } from '../core/version.mjs'
 
 /** Declared hard dependency: the tool registry. */
@@ -598,12 +599,54 @@ export function apply(ctx) {
           brief +
           (hasChecks(id)
             ? `\n\n验收: ensp_verify { scenario: "${id}", topology: "${id}.topo" }`
-            : '\n\n验收: 无专门断言，ensp_verify 会逐条跑场景里的验证命令'),
+            : '\n\n验收: 无专门断言，ensp_verify 会逐条跑场景里的验证命令') +
+          renderKnowledge(id),
       }
     },
   })
 
   /* ---------------------------------------------------------- preset config */
+
+  add(tools, {
+    name: 'ensp_knowledge',
+    description:
+      'Look up curriculum knowledge derived from a certification question bank: short ' +
+      'question/answer pairs filed by topic, and the scenarios that teach each topic. ' +
+      'Pass scenario to list what one lab teaches, or query to search the index.',
+    parameters: {
+      query: str('Keyword, e.g. "LSA" or "MED".'),
+      scenario: str('Scenario id, e.g. "ospf-lsa-types".'),
+    },
+    output: {
+      schema: obj({
+        scope: req(str()),
+        count: req(num()),
+        points: req(str()),
+        error: req(str()),
+      }),
+      render(args, value) {
+        return text(value.points || '(no knowledge point matched)')
+      },
+    },
+    async execute({ query, scenario }) {
+      if (scenario) {
+        if (!SCENARIOS[scenario]) throw new Error(`unknown scenario "${scenario}"`)
+        const points = knowledgeFor(scenario)
+        return {
+          scope: scenario,
+          count: points.length,
+          points: points.map((p) => `#${p.n} [${p.topic}] ${p.q}\n  答: ${p.a}`).join('\n'),
+        }
+      }
+      if (!query) throw new Error('pass query or scenario')
+      const points = searchKnowledge(query)
+      return {
+        scope: String(query),
+        count: points.length,
+        points: points.map((p) => `#${p.n} [${p.topic}] ${p.q}\n  答: ${p.a}`).join('\n'),
+      }
+    },
+  })
 
   add(tools, {
     name: 'ensp_preset_config',

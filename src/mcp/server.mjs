@@ -40,6 +40,7 @@ import {
 import { calibrateAnchors, inspectAnchors, DEFAULT_ANCHORS } from '../core/calibrate.mjs'
 import { doctor, modelsOf } from '../core/doctor.mjs'
 import { runAcceptance, hasChecks, EXPECTATIONS } from '../core/acceptance.mjs'
+import { knowledgeFor, searchKnowledge, knowledgeTopics } from '../core/knowledge.mjs'
 import { pushConfig, pushConfigMany, queryDevice } from '../core/provision.mjs'
 import { SCENARIOS, SCENARIO_IDS, byLevel, renderScenario, searchScenarios } from '../core/presets.mjs'
 import { PACKAGE_NAME, VERSION } from '../core/version.mjs'
@@ -331,6 +332,7 @@ const TOOLS = [
         hasTopology: hasLab(id),
         hasCuratedChecks: hasChecks(id),
         ...(hasLab(id) ? { devices: labDevices(id), addressing: labAddressing(id) } : {}),
+        knowledge: knowledgeFor(id),
       }
     },
   },
@@ -373,6 +375,27 @@ const TOOLS = [
       return runAcceptance({ id: scenario, topology, timeoutMs: timeout, waitMs: wait })
     },
   },
+  {
+    name: 'ensp_knowledge',
+    description:
+      'Search the curriculum knowledge index derived from a certification question bank. ' +
+      'Use it to look up the vocabulary a scenario teaches (which LSA belongs to which area, ' +
+      'which BGP attribute wins, which port role is MSTP only) without leaving the lab. ' +
+      'Returns short question/answer pairs plus the scenarios that teach each topic.',
+    inputSchema: obj({
+      query: { type: 'string', description: 'keyword, e.g. "LSA" or "MED"' },
+      scenario: { type: 'string', description: 'scenario id, to list what that lab teaches' },
+    }),
+    async run({ query, scenario }) {
+      if (scenario) {
+        if (!SCENARIOS[scenario]) throw new Error(`unknown scenario "${scenario}"`)
+        return { scenario, topics: knowledgeTopics(), points: knowledgeFor(scenario) }
+      }
+      if (!query) throw new Error('pass query or scenario')
+      return { query, points: searchKnowledge(query) }
+    },
+  },
+
   {
     name: 'ensp_preset_config',
     description: 'Return the configuration that makes the built-in two-PC lab pass traffic.',

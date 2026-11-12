@@ -166,6 +166,7 @@ export class ConsoleSession {
   #prompt = null
   #hostname = null
   #closed = false
+  #closeReason = null
   #waiters = new Set()
 
   /**
@@ -182,10 +183,12 @@ export class ConsoleSession {
     })
     socket.on('close', () => {
       this.#closed = true
+      this.#closeReason ??= 'the console connection was closed by the device'
       for (const waiter of this.#waiters) waiter()
     })
-    socket.on('error', () => {
+    socket.on('error', (err) => {
       this.#closed = true
+      this.#closeReason ??= `console error: ${err?.message ?? err}`
       for (const waiter of this.#waiters) waiter()
     })
   }
@@ -216,6 +219,11 @@ export class ConsoleSession {
   /** @returns {boolean} */
   get closed() {
     return this.#closed
+  }
+
+  /** @returns {string|null} why the console closed, when it closed unexpectedly. */
+  get closeReason() {
+    return this.#closeReason
   }
 
   /**
@@ -349,6 +357,20 @@ export class ConsoleSession {
     // followed by the rest of the line it interrupted. Stitch that tail back onto
     // the previous line so the caller sees what paging disabled would have shown.
     if (pages > 0) output = stitchPages(output)
+
+    // A console that closed mid-command produced no output, and no output looks
+    // exactly like a command that succeeded and printed nothing. Report the
+    // closed socket instead of handing the caller a silent empty success.
+    if (this.#closed) {
+      return {
+        command,
+        ok: false,
+        error: this.#closeReason || 'the console connection closed before the reply arrived',
+        prompt: this.#prompt,
+        view: this.view,
+        output,
+      }
+    }
 
     const errorMatch = output.match(ERROR_RE)
     const prompt = this.#prompt

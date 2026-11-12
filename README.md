@@ -123,6 +123,17 @@ ensp up ospf-single.topo
 
 场景清单与蓝图均可生成、可校验。`docs/SCENARIOS.md` 由 `src/core/presets.mjs` 与 `src/core/labs.mjs` 渲染，`npm run docs:check` 在两者不一致时返回非零，CI 亦执行该检查。
 
+### 知识点
+
+场景说明只给方向，命令由使用者补全，因此需要知道该场景涉及的术语。`src/core/knowledge.json` 收录按主题归类的知识点：每个场景在末尾附上同主题的若干「问题 + 答案」，涵盖 LSA 类型归属、BGP 选路属性、MSTP 端口角色等。
+
+```bash
+ensp preset ospf-lsa-types          # 详情末尾带知识点小节
+ensp preset --knowledge LSA         # 按关键词检索知识点
+```
+
+知识点来自认证题库，按主题重新归类：题目的原始标签并不可靠，同一道 OSPF 题可能同时被标为安全，因此按正文关键词评分后只归入最匹配的主题，并剔除「以下错误的是」这类去掉干扰项后只剩错误陈述的题目。题库原文不随包分发，`knowledge.json` 只保留题干与正确选项文本。
+
 ```bash
 npm run docs          # 重新生成 docs/SCENARIOS.md
 npm run docs:check    # 只检查是否过期
@@ -254,7 +265,7 @@ ensp status
 }
 ```
 
-提供 14 个工具：`ensp_status`、`ensp_build_topology`、`ensp_open`、`ensp_start`、`ensp_stop`、`ensp_apply`、`ensp_apply_dir`、`ensp_query`、`ensp_probe`、`ensp_doctor`、`ensp_verify`、`ensp_scenarios`、`ensp_scenario`、`ensp_preset_config`。
+提供 15 个工具：`ensp_status`、`ensp_build_topology`、`ensp_open`、`ensp_start`、`ensp_stop`、`ensp_apply`、`ensp_apply_dir`、`ensp_query`、`ensp_probe`、`ensp_doctor`、`ensp_verify`、`ensp_scenarios`、`ensp_scenario`、`ensp_knowledge`、`ensp_preset_config`。
 
 ## 环境要求
 

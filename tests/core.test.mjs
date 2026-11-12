@@ -203,7 +203,7 @@ test('DSH tool definitions satisfy the harness schema contract', async () => {
   const plugin = await import('../src/dsh/index.mjs')
   plugin.apply(ctx)
 
-  assert.equal(registered.length, 14, 'expected 14 tools')
+  assert.equal(registered.length, 15, 'expected 15 tools')
 
   const violations = (node, path = 's') => {
     const bad = []
@@ -882,4 +882,102 @@ test('install paths are found by probing, not by assuming E:', async () => {
     /does not exist/,
     'a wrong explicit path is reported, not replaced by a guess',
   )
+})
+
+test('the knowledge index files each question under one topic, not all of them', async () => {
+  const { knowledgeTopics, knowledgeFor, searchKnowledge } = await import('../src/core/knowledge.mjs')
+  const topics = knowledgeTopics()
+  assert.ok(topics.length >= 6, 'expected at least six topics, got ' + topics.length)
+
+  // Every point carries a question, an answer and the question number it came
+  // from; a point without an answer teaches nothing.
+  const points = knowledgeFor('ospf-lsa-types')
+  assert.ok(points.length > 0, 'ospf-lsa-types should have knowledge points')
+  for (const p of points) {
+    assert.ok(typeof p.n === 'number' && p.n > 0, 'point needs a question number')
+    assert.ok(p.q && p.q.length > 5, 'point needs a question')
+    assert.ok(p.a && p.a.length > 2, 'point needs an answer')
+    assert.ok(topics.includes(p.topic), 'point topic must be a known topic')
+  }
+
+  // An unknown scenario must inherit nothing: a knowledge section that appears on
+  // every lab would be noise rather than material for that lab.
+  assert.equal(knowledgeFor('__probe-not-a-scenario').length, 0)
+
+  // Search is case-insensitive and covers both the question and its answer.
+  assert.ok(searchKnowledge('lsa').length >= searchKnowledge('LSA').length - 1, 'search is case-insensitive')
+  assert.deepEqual(searchKnowledge(''), [], 'an empty query matches nothing')
+})
+
+test('a scenario brief carries the knowledge for the topic it teaches', async () => {
+  const { renderKnowledge, knowledgeFor } = await import('../src/core/knowledge.mjs')
+  const { knowledgeTopics } = await import('../src/core/knowledge.mjs')
+
+  // At least one scenario per covered topic must show a section; the heading is
+  // the contract the CLI and the plugins both rely on.
+  let covered = 0
+  for (const topic of knowledgeTopics()) {
+    const { SCENARIOS } = await import('../src/core/presets.mjs')
+    const owner = Object.keys(SCENARIOS).find((id) => knowledgeFor(id).some((p) => p.topic === topic))
+    if (!owner) continue
+    covered++
+    const text = renderKnowledge(owner)
+    assert.ok(text.includes('## 知识点'), owner + ' should render a knowledge section')
+    assert.ok(text.includes('答:'), owner + ' should render answers')
+  }
+  assert.ok(covered >= 5, 'expected knowledge to reach at least five scenarios, got ' + covered)
+
+  // A scenario with no topic must render nothing rather than an empty heading.
+  assert.equal(renderKnowledge('ospf-zzz-not-a-scenario'), '')
+})
+
+test('the knowledge generator is deterministic and drops unusable questions', async () => {
+  const { buildIndex } = await import('../scripts/gen-knowledge.mjs')
+
+  // A miniature bank covering the three shapes the generator must handle: a
+  // multi-key answer that needs its options spelled out, an "which is wrong"
+  // question that must be dropped, and one with no machine-readable answer.
+  const bank = [
+    {
+      n: 1,
+      type: '多选题',
+      stem: 'MED 属性用于向外部对等体指出进入本 AS 的首选路径，以下描述正确的是哪些项?',
+      options: [
+        { key: 'A', text: 'MED 值越小越优' },
+        { key: 'B', text: 'MED 值越大越优' },
+      ],
+      answer: 'A',
+      analysis: 'MED 值越小则 BGP 路由越优',
+    },
+    {
+      n: 2,
+      type: '单选题',
+      stem: '以下关于 OSPF LSA 的描述，错误的是哪一项?',
+      options: [{ key: 'A', text: '3 类 LSA 由 ABR 产生' }],
+      answer: 'A',
+      analysis: 'OSPF LSA',
+    },
+    {
+      n: 3,
+      type: '填空题',
+      stem: '请将 OSPF LSA 类型与其作用匹配',
+      options: [],
+      answer: '',
+      analysis: 'OSPF LSA',
+    },
+  ]
+
+  const index = buildIndex(bank)
+  assert.equal(index.sourceQuestions, 3)
+  const points = Object.values(index.topics).flatMap((t) => t.points)
+  assert.equal(points.length, 1, 'only the usable question survives')
+  assert.equal(points[0].n, 1)
+  // The answer comes from the option text, not the analysis: "A" alone teaches
+  // nothing, and the analysis is often a restatement of the whole question.
+  assert.ok(points[0].a.startsWith('A. '), 'the key is kept')
+  assert.ok(points[0].a.includes('MED 值越小越优'), 'the chosen option text is kept')
+
+  // Same input, same output: the file is generated, so a churning diff would make
+  // every regeneration look like a change.
+  assert.deepEqual(buildIndex(bank), buildIndex(bank))
 })
