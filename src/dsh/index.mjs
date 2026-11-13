@@ -49,6 +49,7 @@ import { SCENARIOS, SCENARIO_IDS, renderScenario, searchScenarios, byLevel } fro
 import { doctor, modelsOf } from '../core/doctor.mjs'
 import { runAcceptance, hasChecks } from '../core/acceptance.mjs'
 import { knowledgeFor, searchKnowledge, knowledgeTopics, renderKnowledge } from '../core/knowledge.mjs'
+import { curriculumFor, renderCurriculum, searchCurriculum } from '../core/curriculum.mjs'
 import { VERSION } from '../core/version.mjs'
 
 /** Declared hard dependency: the tool registry. */
@@ -582,6 +583,7 @@ export function apply(ctx) {
       schema: obj({
         id: req(str()),
         brief: req(str()),
+        curriculum: req(arr()),
         error: req(str()),
       }),
       render(args, value) {
@@ -600,7 +602,14 @@ export function apply(ctx) {
           (hasChecks(id)
             ? `\n\n验收: ensp_verify { scenario: "${id}", topology: "${id}.topo" }`
             : '\n\n验收: 无专门断言，ensp_verify 会逐条跑场景里的验证命令') +
+          renderCurriculum(id) +
           renderKnowledge(id),
+        curriculum: curriculumFor(id).map((c) => ({
+          level: c.level,
+          title: c.title,
+          page: c.page,
+          verify: c.verify,
+        })),
       }
     },
   })
@@ -610,13 +619,13 @@ export function apply(ctx) {
   add(tools, {
     name: 'ensp_knowledge',
     description:
-      'Look up curriculum knowledge: short statements about the terms a scenario ' +
-        'exercises, grouped by topic. ' +
-      'question/answer pairs filed by topic, and the scenarios that teach each topic. ' +
-      'Pass scenario to list what one lab teaches, or query to search the index.',
+      'Look up two reference indexes. Pass scenario to list what one lab teaches, query to ' +
+      'search short term/answer notes, or syllabus to search the vendor manual chapter index ' +
+      '(chapter goals plus the display commands each chapter uses to prove its result).',
     parameters: {
       query: str('Keyword, e.g. "LSA" or "MED".'),
       scenario: str('Scenario id, e.g. "ospf-lsa-types".'),
+      syllabus: str('Keyword to search the manual chapter index, e.g. "MPLS" or "BFD".'),
     },
     output: {
       schema: obj({
@@ -629,7 +638,22 @@ export function apply(ctx) {
         return text(value.points || '(no knowledge point matched)')
       },
     },
-    async execute({ query, scenario }) {
+    async execute({ query, scenario, syllabus }) {
+      if (syllabus) {
+        const chapters = searchCurriculum(syllabus)
+        return {
+          scope: `syllabus:${syllabus}`,
+          count: chapters.length,
+          points: chapters
+            .map(
+              (c) =>
+                `${c.level} · ${c.title} (p${c.page})\n` +
+                (c.scenarios.length ? `  场景: ${c.scenarios.join(', ')}\n` : '') +
+                (c.verify.length ? `  验证: ${c.verify.slice(0, 4).join(' / ')}` : ''),
+            )
+            .join('\n'),
+        }
+      }
       if (scenario) {
         if (!SCENARIOS[scenario]) throw new Error(`unknown scenario "${scenario}"`)
         const points = knowledgeFor(scenario)
@@ -639,7 +663,7 @@ export function apply(ctx) {
           points: points.map((p) => `#${p.n} [${p.topic}] ${p.q}\n  答: ${p.a}`).join('\n'),
         }
       }
-      if (!query) throw new Error('pass query or scenario')
+      if (!query) throw new Error('pass query, scenario or syllabus')
       const points = searchKnowledge(query)
       return {
         scope: String(query),

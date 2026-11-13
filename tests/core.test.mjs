@@ -8,7 +8,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import test from 'node:test'
 
 import { conform } from '../src/dsh/index.mjs'
@@ -979,4 +979,205 @@ test('the knowledge generator is deterministic and drops unusable questions', as
   // Same input, same output: the file is generated, so a churning diff would make
   // every regeneration look like a change.
   assert.deepEqual(buildIndex(source), buildIndex(source))
+})
+
+test('the curriculum index points every chapter at a real scenario', async () => {
+  const { curriculumLevels, curriculumChapters, curriculumFor, searchCurriculum } = await import(
+    '../src/core/curriculum.mjs'
+  )
+  const { SCENARIOS } = await import('../src/core/presets.mjs')
+
+  // Study order is the order a reader meets the manuals, so the levels have to be
+  // exactly these three rather than whatever a stray chapter title produced.
+  assert.deepEqual(curriculumLevels(), ['HCIA', 'HCIP', 'HCIE'])
+
+  const chapters = curriculumChapters()
+  assert.ok(chapters.length >= 20, 'expected a substantial chapter index, got ' + chapters.length)
+
+  const seen = new Set()
+  for (const chapter of chapters) {
+    const key = chapter.level + '|' + chapter.title
+    assert.ok(!seen.has(key), 'duplicate chapter: ' + key)
+    seen.add(key)
+
+    assert.ok(['HCIA', 'HCIP', 'HCIE'].includes(chapter.level), 'unknown level ' + chapter.level)
+    assert.ok(chapter.title && chapter.title.length > 2, 'chapter needs a title')
+    assert.ok(Number.isInteger(chapter.page) && chapter.page > 0, chapter.title + ' needs a page number')
+
+    // A scenario id that does not exist would render a dead pointer in the brief.
+    for (const id of chapter.scenarios) {
+      assert.ok(SCENARIOS[id], chapter.title + ' points at unknown scenario ' + id)
+    }
+    assert.ok(chapter.scenarios.length > 0, chapter.title + ' teaches no scenario')
+
+    // Verification commands come from the manual, so they must be the two kinds of
+    // command a lab actually proves things with.
+    for (const command of chapter.verify) {
+      assert.match(command, /^(display|ping|tracert)\s/, chapter.title + ': unexpected command ' + command)
+      // The extractor fuses a command with the next token when a page break lands
+      // between them; that produced 'display ip routing-tableprotocol ospf'.
+      assert.ok(!/routing-tableprotocol|briefprotocol|interfaceverbose/.test(command), 'fused command ' + command)
+    }
+  }
+
+  // Both directions of the lookup must agree.
+  const taught = curriculumFor('ospf-lsa-types')
+  assert.ok(taught.length > 0, 'ospf-lsa-types should have a chapter')
+  for (const chapter of taught) assert.ok(chapter.scenarios.includes('ospf-lsa-types'))
+
+  assert.deepEqual(curriculumFor('__probe-not-a-scenario'), [], 'unknown scenario has no chapter')
+  assert.ok(searchCurriculum('bgp').length > 0, 'chapter search should find BGP')
+  assert.ok(searchCurriculum('BGP').length === searchCurriculum('bgp').length, 'search is case-insensitive')
+  assert.deepEqual(searchCurriculum(''), [], 'an empty query matches nothing')
+})
+
+test('the curriculum generator is deterministic and keeps chapters in study order', async () => {
+  const { buildCurriculum } = await import('../scripts/gen-curriculum.mjs')
+
+  // A miniature extract covering the shapes that matter: a chapter whose commands
+  // came back fused, one whose goals are exam questions, and one on a platform
+  // manual that must be skipped because its sibling already covers it.
+  const source = [
+    {
+      manual: 'HCIP-Core.pdf.json',
+      level: 'HCIP',
+      chapter: '1',
+      title: 'OSPF 基础实验',
+      page: 7,
+      goals: ['实现单区域OSPF 的配置', '思考：为什么需要区域划分？'],
+      verify: ['display ip routing-tableprotocol ospf', 'display ospf peer'],
+    },
+    {
+      manual: 'HCIE-VRP.pdf.json',
+      level: 'HCIE',
+      chapter: '1',
+      title: 'IPv4 路由技术',
+      page: 10,
+      goals: ['实现部署BFD 加快OSPF 收敛速度'],
+      verify: ['display ospf bfd session all'],
+    },
+    {
+      manual: 'HCIE-YunShan_OS.pdf.json',
+      level: 'HCIE',
+      chapter: '1',
+      title: 'IPv4 路由技术',
+      page: 10,
+      goals: ['实现部署BFD'],
+      verify: ['display ospf bfd session all'],
+    },
+  ]
+
+  const index = buildCurriculum(source)
+  assert.deepEqual(Object.keys(index.levels), ['HCIA', 'HCIP', 'HCIE'])
+
+  const chapters = index.levels.HCIP.concat(index.levels.HCIE)
+  assert.equal(chapters.length, 2, 'the platform-specific duplicate is skipped')
+
+  // HCIA sorts before HCIP before HCIE, so the flat order matches the study order.
+  assert.equal(chapters[0].level, 'HCIP')
+  assert.equal(chapters[1].level, 'HCIE')
+
+  const ospf = chapters[0]
+  assert.deepEqual(ospf.verify, ['display ip routing-table protocol ospf', 'display ospf peer'].sort((a, b) =>
+    ospf.verify.indexOf(a) - ospf.verify.indexOf(b),
+  ))
+  // Thinking questions are not learning goals.
+  assert.ok(!ospf.goals.some((g) => g.includes('思考')), 'exam questions are dropped from goals')
+
+  // Same input, same output: the file is generated, so a churning diff would make
+  // every regeneration look like a change.
+  assert.deepEqual(buildCurriculum(source), buildCurriculum(source))
+})
+
+test('the bundle manifest declares what DSH 0.2 checks before loading it', async () => {
+  // DSH 0.2.1-alpha.3 made `engines.dsh` the single compatibility answer: when it
+  // is present, the @deepseek-ai/dsh peer ranges are ignored, so the range here has
+  // to cover every release the plugin actually runs on. Without it, profile
+  // startup falls back to peers, and this package declares none.
+  const { existsSync } = await import('node:fs')
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+
+  assert.ok(manifest.engines && typeof manifest.engines === 'object', 'engines must stay an object')
+  const range = manifest.engines.dsh
+  assert.equal(typeof range, 'string', 'engines.dsh must be a string')
+
+  // A `workspace:` value is only legal in peers; in engines.dsh it is treated as
+  // incompatible, which would refuse the package at install time.
+  assert.ok(!range.includes('workspace:'), 'workspace: is not a version range')
+  assert.ok(range.trim() !== '', 'an empty range matches nothing')
+
+  // Both bounds are needed. An unbounded range would promise compatibility with a
+  // DSH major that has not been tested, which is the failure this declaration
+  // exists to prevent.
+  const bounds = /^>=(\d+)\.(\d+)\.(\d+)(?:-[\w.]+)? <(\d+)\.(\d+)\.(\d+)/.exec(range)
+  assert.ok(bounds, 'engines.dsh needs a lower and an upper bound, got ' + range)
+  assert.equal(Number(bounds[1]), 0, 'the lower bound is a 0.x DSH')
+  assert.equal(Number(bounds[4]), 0, 'the upper bound is the next 0.x, not 1.0')
+  assert.ok(
+    Number(bounds[5]) > Number(bounds[2]),
+    'the upper bound must be above the lower bound',
+  )
+
+  // `dsh.bundle.platforms` is validated before the layer composes. eNSP has no
+  // build outside Windows, so a bundle that claims otherwise would be activated on
+  // a host where every device operation must fail.
+  const bundle = manifest.dsh?.bundle
+  assert.ok(bundle, 'dsh.bundle is what makes this an installable bundle')
+  assert.equal(bundle.patch, './cordis.patch.yml')
+  assert.ok(Array.isArray(bundle.platforms) && bundle.platforms.length > 0, 'platforms must be a non-empty list')
+  for (const platform of bundle.platforms) {
+    assert.equal(typeof platform, 'string')
+    assert.ok(
+      platform === 'wsl' || platform === 'win32',
+      'unexpected platform ' + platform + ': eNSP only runs on Windows',
+    )
+  }
+  assert.ok(bundle.platforms.includes('win32'), 'win32 has to be admitted, or the bundle never loads here')
+})
+
+test('locale metadata is readable and its detail documents ship with the package', async () => {
+  // Since DSH 0.2.0-rc.2 a package-root plugin no longer has its subpath
+  // package.json read for display metadata: the title, description and long
+  // document come from locale/<language>.json. Without these files the plugin
+  // manager falls back to the bare package name.
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const root = new URL('../', import.meta.url)
+
+  assert.equal(manifest.exports['./package.json'], './package.json', 'package fields are read through this export')
+  assert.equal(manifest.exports['./locale/*.json'], './locale/*.json', 'locale files are read through this export')
+  assert.ok(
+    manifest.files.includes('locale/*.json'),
+    'the locale files must be published, or the installed package has no metadata',
+  )
+
+  for (const language of ['en', 'zh']) {
+    const file = new URL('locale/' + language + '.json', root)
+    const meta = JSON.parse(readFileSync(file, 'utf8')).meta
+    assert.ok(meta, language + ' needs a meta object')
+    for (const field of ['title', 'description']) {
+      assert.equal(typeof meta[field], 'string', language + '.' + field + ' must be a string')
+      assert.ok(meta[field].trim() !== '', language + '.' + field + ' must not be empty')
+    }
+
+    // `meta.detail` is a bare relative path with no fallback. A root-level
+    // document is rejected by DSH because its neighbouring images would not be
+    // published, so the path has to name a file inside a shipped directory.
+    const detail = meta.detail
+    assert.equal(typeof detail, 'string', language + ' should name a detail document')
+    assert.ok(detail.endsWith('.md') || detail.endsWith('.markdown'), 'detail must be Markdown')
+    assert.ok(!detail.startsWith('/') && !detail.includes('\\'), 'detail uses / and stays relative')
+    assert.ok(detail.includes('/'), 'a root-level document is rejected')
+    assert.ok(
+      existsSync(new URL(detail, root)),
+      language + ' detail document is missing: ' + detail,
+    )
+
+    // The top-level directory has to be listed in `files`. Without it the
+    // document is present in the repository and absent from the package.
+    const top = detail.split('/')[0]
+    assert.ok(
+      manifest.files.includes(top),
+      'the directory holding ' + detail + ' must be in files',
+    )
+  }
 })

@@ -41,6 +41,10 @@ ensp up ospf-single.topo
 生成：`ensp preset vlan-access --topo vlan-access.topo`
 - 验收：`ensp verify vlan-access --topology vlan-access.topo`（2 条断言）
 
+**教材章节**
+- HCIA · 华为网络设备基本操作（手册第 9 页）
+- HCIA · VLAN 配置实验（手册第 21 页）
+
 ### trunk-interconnect — Trunk 互联与多 VLAN 透传
 
 - **英文名**：Trunk interconnect
@@ -68,6 +72,10 @@ ensp up ospf-single.topo
 
 生成：`ensp preset trunk-interconnect --topo trunk-interconnect.topo`
 - 验收：`ensp verify trunk-interconnect --topology trunk-interconnect.topo`（1 条断言）
+
+**教材章节**
+- HCIA · 华为网络设备基本操作（手册第 9 页）
+- HCIA · VLAN 配置实验（手册第 21 页）
 
 ### vlanif-routing — VLAN 间路由（三层交换机）
 
@@ -102,6 +110,11 @@ ensp up ospf-single.topo
 
 生成：`ensp preset vlanif-routing --topo vlanif-routing.topo`
 - 验收：`ensp verify vlanif-routing --topology vlanif-routing.topo`（2 条断言）
+
+**教材章节**
+- HCIA · VLAN 配置实验（手册第 21 页）
+- HCIA · 直连路由实验（手册第 65 页）
+- HCIA · 园区网络综合实验（手册第 220 页）
 
 ### stp-rstp — STP / RSTP 生成树
 
@@ -138,6 +151,10 @@ ensp up ospf-single.topo
 生成：`ensp preset stp-rstp --topo stp-rstp.topo`
 - 验收：`ensp verify stp-rstp --topology stp-rstp.topo`（2 条断言）
 
+**教材章节**
+- HCIA · 生成树配置实验（手册第 41 页）
+- HCIP · RSTP 与MSTP 实验（手册第 167 页）
+
 ### link-aggregation — 链路聚合 Eth-Trunk
 
 - **英文名**：Link aggregation
@@ -165,6 +182,9 @@ ensp up ospf-single.topo
 
 生成：`ensp preset link-aggregation --topo link-aggregation.topo`
 - 验收：`ensp verify link-aggregation --topology link-aggregation.topo`（1 条断言）
+
+**教材章节**
+- HCIA · 以太网链路聚合实验（手册第 54 页）
 
 ### port-security — 端口安全与 MAC 限制
 
@@ -195,6 +215,10 @@ ensp up ospf-single.topo
 生成：`ensp preset port-security --topo port-security.topo`
 - 验收：`ensp verify port-security --topology port-security.topo`（1 条断言）
 
+**教材章节**
+- HCIP · 网络准入控制实验（手册第 11 页）
+- HCIP · 以太网交换安全实验（手册第 91 页）
+
 ### port-isolation — 端口隔离与 MUX VLAN
 
 - **英文名**：Port isolation and MUX VLAN
@@ -223,6 +247,9 @@ ensp up ospf-single.topo
 
 生成：`ensp preset port-isolation --topo port-isolation.topo`
 - 验收：`ensp verify port-isolation --topology port-isolation.topo`（无专门断言，逐条跑本场景的验证命令）
+
+**教材章节**
+- HCIP · VLAN 高级技术实验（手册第 79 页）
 
 ### super-vlan — VLAN 聚合（Super-VLAN）
 
@@ -258,6 +285,10 @@ ensp up ospf-single.topo
 
 生成：`ensp preset super-vlan --topo super-vlan.topo`
 - 验收：`ensp verify super-vlan --topology super-vlan.topo`（1 条断言）
+
+**教材章节**
+- HCIA · VLAN 配置实验（手册第 21 页）
+- HCIP · VLAN 高级技术实验（手册第 79 页）
 
 ### static-route — 静态路由与默认路由
 
@@ -295,6 +326,10 @@ ensp up ospf-single.topo
 
 生成：`ensp preset static-route --topo static-route.topo`
 - 验收：`ensp verify static-route --topology static-route.topo`（1 条断言）
+
+**教材章节**
+- HCIA · 静态路由实验（手册第 72 页）
+- HCIA · 园区网络综合实验（手册第 220 页）
 
 ### rip — RIPv1 / RIPv2
 
@@ -375,6 +410,10 @@ ensp up ospf-single.topo
 生成：`ensp preset ospf-single --topo ospf-single.topo`
 - 验收：`ensp verify ospf-single --topology ospf-single.topo`（2 条断言）
 
+**教材章节**
+- HCIA · OSPF 配置实验（手册第 101 页）
+- HCIP · OSPF 基础实验（手册第 7 页）
+
 ### dhcp — DHCP 服务（含中继）
 
 - **英文名**：DHCP server and relay
@@ -409,6 +448,10 @@ ensp up ospf-single.topo
 生成：`ensp preset dhcp --topo dhcp.topo`
 - 验收：`ensp verify dhcp --topology dhcp.topo`（1 条断言）
 
+**教材章节**
+- HCIA · IP 地址自动配置实验（手册第 88 页）
+- HCIP · DHCP 实验（手册第 230 页）
+
 ### acl-filter — ACL 访问控制
 
 - **英文名**：ACL filtering
@@ -442,6 +485,10 @@ ensp up ospf-single.topo
 生成：`ensp preset acl-filter --topo acl-filter.topo`
 - 验收：`ensp verify acl-filter --topology acl-filter.topo`（1 条断言）
 
+**教材章节**
+- HCIA · ACL 配置实验（手册第 129 页）
+- HCIA · NAT 配置实验（手册第 156 页）
+
 ### aaa-local — 本地 AAA 与设备登录
 
 - **英文名**：Local AAA and device login
@@ -474,6 +521,11 @@ ensp up ospf-single.topo
 
 生成：`ensp preset aaa-local --topo aaa-local.topo`
 - 验收：`ensp verify aaa-local --topology aaa-local.topo`（1 条断言）
+
+**教材章节**
+- HCIA · 文件管理实验（手册第 136 页）
+- HCIA · 远程登录实验（手册第 144 页）
+- HCIP · 网络准入控制实验（手册第 11 页）
 
 ### vrrp-basics — VRRP 网关冗余
 
@@ -516,6 +568,10 @@ ensp up ospf-single.topo
 生成：`ensp preset vrrp-basics --topo vrrp-basics.topo`
 - 验收：`ensp verify vrrp-basics --topology vrrp-basics.topo`（2 条断言）
 
+**教材章节**
+- HCIP · RSTP 与MSTP 实验（手册第 167 页）
+- HCIP · VRRP 实验（手册第 219 页）
+
 ### network-management — 网络管理（SNMP / NTP / Syslog）
 
 - **英文名**：Network management with SNMP, NTP and syslog
@@ -553,6 +609,12 @@ ensp up ospf-single.topo
 
 生成：`ensp preset network-management --topo network-management.topo`
 - 验收：`ensp verify network-management --topology network-management.topo`（1 条断言）
+
+**教材章节**
+- HCIA · 文件管理实验（手册第 136 页）
+- HCIA · 远程登录实验（手册第 144 页）
+- HCIA · 网络编程自动化实验(可选)（手册第 179 页）
+- HCIE · 网络开放可编程（手册第 441 页）
 
 
 ## 进阶
@@ -593,6 +655,10 @@ ensp up ospf-single.topo
 生成：`ensp preset mstp-load-balance --topo mstp-load-balance.topo`
 - 验收：`ensp verify mstp-load-balance --topology mstp-load-balance.topo`（无专门断言，逐条跑本场景的验证命令）
 
+**教材章节**
+- HCIA · 生成树配置实验（手册第 41 页）
+- HCIP · RSTP 与MSTP 实验（手册第 167 页）
+
 ### ospf-multi-area — OSPF 多区域与 ABR
 
 - **英文名**：OSPF multi-area and ABR
@@ -632,6 +698,9 @@ ensp up ospf-single.topo
 生成：`ensp preset ospf-multi-area --topo ospf-multi-area.topo`
 - 验收：`ensp verify ospf-multi-area --topology ospf-multi-area.topo`（2 条断言）
 
+**教材章节**
+- HCIP · OSPF 基础实验（手册第 7 页）
+
 ### ospf-stub-nssa — OSPF 特殊区域（Stub / NSSA）
 
 - **英文名**：OSPF stub and NSSA
@@ -668,6 +737,9 @@ ensp up ospf-single.topo
 
 生成：`ensp preset ospf-stub-nssa --topo ospf-stub-nssa.topo`
 - 验收：`ensp verify ospf-stub-nssa --topology ospf-stub-nssa.topo`（2 条断言）
+
+**教材章节**
+- HCIP · OSPF 基础实验（手册第 7 页）
 
 ### ospf-lsa-types — OSPF LSA 类型与区域过滤
 
@@ -717,6 +789,9 @@ ensp up ospf-single.topo
 生成：`ensp preset ospf-lsa-types --topo ospf-lsa-types.topo`
 - 验收：`ensp verify ospf-lsa-types --topology ospf-lsa-types.topo`（无专门断言，逐条跑本场景的验证命令）
 
+**教材章节**
+- HCIP · OSPF 基础实验（手册第 7 页）
+
 ### ospf-virtual-link — OSPF 虚连接
 
 - **英文名**：OSPF virtual link
@@ -756,6 +831,9 @@ ensp up ospf-single.topo
 
 生成：`ensp preset ospf-virtual-link --topo ospf-virtual-link.topo`
 - 验收：`ensp verify ospf-virtual-link --topology ospf-virtual-link.topo`（无专门断言，逐条跑本场景的验证命令）
+
+**教材章节**
+- HCIP · OSPF 基础实验（手册第 7 页）
 
 ### ospf-troubleshooting — OSPF 邻居排障
 
@@ -800,6 +878,11 @@ ensp up ospf-single.topo
 生成：`ensp preset ospf-troubleshooting --topo ospf-troubleshooting.topo`
 - 验收：`ensp verify ospf-troubleshooting --topology ospf-troubleshooting.topo`（无专门断言，逐条跑本场景的验证命令）
 
+**教材章节**
+- HCIA · 网络故障排除实验（手册第 188 页）
+- HCIP · IGP 高级特性实验（手册第 6 页）
+- HCIE · IPv4 路由技术（手册第 10 页）
+
 ### nat — NAT（源 NAT / NAT Server）
 
 - **英文名**：NAT source and server
@@ -835,6 +918,11 @@ ensp up ospf-single.topo
 
 生成：`ensp preset nat --topo nat.topo`
 - 验收：`ensp verify nat --topology nat.topo`（1 条断言）
+
+**教材章节**
+- HCIA · ACL 配置实验（手册第 129 页）
+- HCIA · NAT 配置实验（手册第 156 页）
+- HCIP · 防火墙技术实验（手册第 208 页）
 
 ### ppp-hdlc — HDLC 与 PPP（含 PPPoE）
 
@@ -907,6 +995,12 @@ ensp up ospf-single.topo
 生成：`ensp preset ipv6 --topo ipv6.topo`
 - 验收：`ensp verify ipv6 --topology ipv6.topo`（2 条断言）
 
+**教材章节**
+- HCIA · IPv6 地址配置实验（手册第 118 页）
+- HCIP · IPv6 实验（手册第 52 页）
+- HCIE · IPv6 路由技术（手册第 91 页）
+- HCIE · SRv6 实验（手册第 399 页）
+
 ### dhcp-snooping — DHCP Snooping 与 IPSG
 
 - **英文名**：DHCP snooping and IPSG
@@ -943,6 +1037,12 @@ ensp up ospf-single.topo
 生成：`ensp preset dhcp-snooping --topo dhcp-snooping.topo`
 - 验收：`ensp verify dhcp-snooping --topology dhcp-snooping.topo`（1 条断言）
 
+**教材章节**
+- HCIA · IP 地址自动配置实验（手册第 88 页）
+- HCIP · 网络准入控制实验（手册第 11 页）
+- HCIP · 以太网交换安全实验（手册第 91 页）
+- HCIP · DHCP 实验（手册第 230 页）
+
 ### arp-security — ARP 安全（防欺骗与防攻击）
 
 - **英文名**：ARP security
@@ -977,6 +1077,9 @@ ensp up ospf-single.topo
 
 生成：`ensp preset arp-security --topo arp-security.topo`
 - 验收：`ensp verify arp-security --topology arp-security.topo`（无专门断言，逐条跑本场景的验证命令）
+
+**教材章节**
+- HCIP · 以太网交换安全实验（手册第 91 页）
 
 ### qos-basics — QoS 分类标记与队列
 
@@ -1051,6 +1154,10 @@ ensp up ospf-single.topo
 生成：`ensp preset wlan-basic --topo wlan-basic.topo`
 - 验收：`ensp verify wlan-basic --topology wlan-basic.topo`（无专门断言，逐条跑本场景的验证命令）
 
+**教材章节**
+- HCIA · WAC+FIT AP 组网实验（手册第 164 页）
+- HCIP · WLAN 实验（手册第 242 页）
+
 ### ospfv3-ipv6 — OSPFv3 与 IPv6 双栈
 
 - **英文名**：OSPFv3 and IPv6 dual stack
@@ -1091,6 +1198,12 @@ ensp up ospf-single.topo
 
 生成：`ensp preset ospfv3-ipv6 --topo ospfv3-ipv6.topo`
 - 验收：`ensp verify ospfv3-ipv6 --topology ospfv3-ipv6.topo`（1 条断言）
+
+**教材章节**
+- HCIA · IPv6 地址配置实验（手册第 118 页）
+- HCIP · IPv6 实验（手册第 52 页）
+- HCIE · IPv6 路由技术（手册第 91 页）
+- HCIE · SRv6 实验（手册第 399 页）
 
 ### isis-multi-level — IS-IS 多级别与默认路由注入
 
@@ -1136,6 +1249,11 @@ ensp up ospf-single.topo
 生成：`ensp preset isis-multi-level --topo isis-multi-level.topo`
 - 验收：`ensp verify isis-multi-level --topology isis-multi-level.topo`（2 条断言）
 
+**教材章节**
+- HCIP · IGP 高级特性实验（手册第 6 页）
+- HCIP · IS-IS 基础实验（手册第 75 页）
+- HCIE · IPv4 路由技术（手册第 10 页）
+
 
 ## 高级
 
@@ -1177,6 +1295,9 @@ ensp up ospf-single.topo
 
 生成：`ensp preset bgp-ebgp-ibgp --topo bgp-ebgp-ibgp.topo`
 - 验收：`ensp verify bgp-ebgp-ibgp --topology bgp-ebgp-ibgp.topo`（2 条断言）
+
+**教材章节**
+- HCIP · BGP 实验（手册第 89 页）
 
 ### bgp-attributes — BGP 选路属性
 
@@ -1221,6 +1342,10 @@ ensp up ospf-single.topo
 生成：`ensp preset bgp-attributes --topo bgp-attributes.topo`
 - 验收：`ensp verify bgp-attributes --topology bgp-attributes.topo`（无专门断言，逐条跑本场景的验证命令）
 
+**教材章节**
+- HCIP · BGP 高级特性实验（手册第 27 页）
+- HCIP · 路由策略与路由控制实验（手册第 154 页）
+
 ### bgp-aggregation — BGP 路由聚合与团体属性
 
 - **英文名**：BGP aggregation and communities
@@ -1264,6 +1389,10 @@ ensp up ospf-single.topo
 生成：`ensp preset bgp-aggregation --topo bgp-aggregation.topo`
 - 验收：`ensp verify bgp-aggregation --topology bgp-aggregation.topo`（无专门断言，逐条跑本场景的验证命令）
 
+**教材章节**
+- HCIP · BGP 高级特性实验（手册第 27 页）
+- HCIP · BGP 实验（手册第 89 页）
+
 ### bgp-troubleshooting — BGP 邻居排障
 
 - **英文名**：BGP neighbour troubleshooting
@@ -1305,6 +1434,11 @@ ensp up ospf-single.topo
 
 生成：`ensp preset bgp-troubleshooting --topo bgp-troubleshooting.topo`
 - 验收：`ensp verify bgp-troubleshooting --topology bgp-troubleshooting.topo`（无专门断言，逐条跑本场景的验证命令）
+
+**教材章节**
+- HCIA · 网络故障排除实验（手册第 188 页）
+- HCIP · BGP 高级特性实验（手册第 27 页）
+- HCIE · IPv4 路由技术（手册第 10 页）
 
 ### stack-istack — 交换机堆叠与 iStack
 
@@ -1389,6 +1523,9 @@ ensp up ospf-single.topo
 生成：`ensp preset route-policy-pbr --topo route-policy-pbr.topo`
 - 验收：`ensp verify route-policy-pbr --topology route-policy-pbr.topo`（无专门断言，逐条跑本场景的验证命令）
 
+**教材章节**
+- HCIP · 路由策略与路由控制实验（手册第 154 页）
+
 ### bgp-route-reflector — BGP 路由反射器与联盟
 
 - **英文名**：BGP route reflector and confederation
@@ -1426,6 +1563,9 @@ ensp up ospf-single.topo
 
 生成：`ensp preset bgp-route-reflector --topo bgp-route-reflector.topo`
 - 验收：`ensp verify bgp-route-reflector --topology bgp-route-reflector.topo`（2 条断言）
+
+**教材章节**
+- HCIP · BGP 实验（手册第 89 页）
 
 ### ipsec-vpn — IPsec VPN
 
@@ -1510,6 +1650,9 @@ ensp up ospf-single.topo
 生成：`ensp preset multicast-pim-sm --topo multicast-pim-sm.topo`
 - 验收：`ensp verify multicast-pim-sm --topology multicast-pim-sm.topo`（2 条断言）
 
+**教材章节**
+- HCIP · 组播实验（手册第 179 页）
+
 ### firewall-zones — 防火墙安全域与策略
 
 - **英文名**：Firewall zones and security policies
@@ -1553,6 +1696,9 @@ ensp up ospf-single.topo
 生成：`ensp preset firewall-zones --topo firewall-zones.topo`
 - 验收：`ensp verify firewall-zones --topology firewall-zones.topo`（无专门断言，逐条跑本场景的验证命令）
 
+**教材章节**
+- HCIP · 防火墙技术实验（手册第 208 页）
+
 ### bfd-fast-convergence — BFD 快速故障检测
 
 - **英文名**：BFD fast failure detection
@@ -1595,6 +1741,10 @@ ensp up ospf-single.topo
 
 生成：`ensp preset bfd-fast-convergence --topo bfd-fast-convergence.topo`
 - 验收：`ensp verify bfd-fast-convergence --topology bfd-fast-convergence.topo`（无专门断言，逐条跑本场景的验证命令）
+
+**教材章节**
+- HCIP · IGP 高级特性实验（手册第 6 页）
+- HCIE · IPv4 路由技术（手册第 10 页）
 
 ### mpls-basic — MPLS 标签转发
 
@@ -1640,6 +1790,13 @@ ensp up ospf-single.topo
 
 生成：`ensp preset mpls-basic --topo mpls-basic.topo`
 - 验收：`ensp verify mpls-basic --topology mpls-basic.topo`（2 条断言）
+
+**教材章节**
+- HCIP · VXLAN 与EVPN 实验（手册第 38 页）
+- HCIP · BGP/MPLS IP VPN 实验（手册第 105 页）
+- HCIE · MPLS VPN（手册第 52 页）
+- HCIE · EVPN（手册第 71 页）
+- HCIE · SR-MPLS 实验（手册第 336 页）
 
 ### mpls-l3vpn — BGP/MPLS L3VPN
 
@@ -1688,6 +1845,12 @@ ensp up ospf-single.topo
 生成：`ensp preset mpls-l3vpn --topo mpls-l3vpn.topo`
 - 验收：`ensp verify mpls-l3vpn --topology mpls-l3vpn.topo`（2 条断言）
 
+**教材章节**
+- HCIP · BGP/MPLS IP VPN 实验（手册第 105 页）
+- HCIE · MPLS VPN（手册第 52 页）
+- HCIE · SR-MPLS 实验（手册第 336 页）
+- HCIE · SRv6 实验（手册第 399 页）
+
 ### dual-homed-isp — 双出口多运营商选路
 
 - **英文名**：Dual-homed ISP egress
@@ -1728,6 +1891,9 @@ ensp up ospf-single.topo
 
 生成：`ensp preset dual-homed-isp --topo dual-homed-isp.topo`
 - 验收：`ensp verify dual-homed-isp --topology dual-homed-isp.topo`（无专门断言，逐条跑本场景的验证命令）
+
+**教材章节**
+- HCIE · 广域互联网络部署（手册第 257 页）
 
 ### firewall-hrp — 防火墙双机热备（HRP）
 
@@ -1819,6 +1985,12 @@ ensp up ospf-single.topo
 生成：`ensp preset spine-leaf-vxlan --topo spine-leaf-vxlan.topo`
 - 验收：`ensp verify spine-leaf-vxlan --topology spine-leaf-vxlan.topo`（无专门断言，逐条跑本场景的验证命令）
 
+**教材章节**
+- HCIP · VXLAN 与EVPN 实验（手册第 38 页）
+- HCIE · EVPN（手册第 71 页）
+- HCIE · VXLAN 实验（手册第 111 页）
+- HCIE · VXLAN 虚拟化园区部署（手册第 153 页）
+
 ### ipsec-gre-tunnel — IPsec 与 GRE 隧道组合
 
 - **英文名**：IPsec over GRE and tunnel backup
@@ -1861,6 +2033,10 @@ ensp up ospf-single.topo
 生成：`ensp preset ipsec-gre-tunnel --topo ipsec-gre-tunnel.topo`
 - 验收：`ensp verify ipsec-gre-tunnel --topology ipsec-gre-tunnel.topo`（无专门断言，逐条跑本场景的验证命令）
 
+**教材章节**
+- HCIE · MPLS VPN（手册第 52 页）
+- HCIE · 广域互联网络部署（手册第 257 页）
+
 ### wlan-roaming — WLAN 漫游与 AC 高可用
 
 - **英文名**：WLAN roaming and AC redundancy
@@ -1899,6 +2075,11 @@ ensp up ospf-single.topo
 
 生成：`ensp preset wlan-roaming --topo wlan-roaming.topo`
 - 验收：`ensp verify wlan-roaming --topology wlan-roaming.topo`（无专门断言，逐条跑本场景的验证命令）
+
+**教材章节**
+- HCIA · WAC+FIT AP 组网实验（手册第 164 页）
+- HCIP · WLAN 实验（手册第 242 页）
+- HCIE · VXLAN 虚拟化园区部署（手册第 153 页）
 
 ### campus-network — 园区网综合（双核心 + 接入 + 出口）
 
@@ -1950,3 +2131,6 @@ ensp up ospf-single.topo
 
 生成：`ensp preset campus-network --topo campus-network.topo`
 - 验收：`ensp verify campus-network --topology campus-network.topo`（无专门断言，逐条跑本场景的验证命令）
+
+**教材章节**
+- HCIA · 园区网络综合实验（手册第 220 页）

@@ -19,6 +19,7 @@ import { SCENARIOS, SCENARIO_IDS, byLevel } from '../src/core/presets.mjs'
 import { LABS, LAB_IDS, hasLab, labAddressing, labDevices, labModels } from '../src/core/labs.mjs'
 import { imageNotesFor } from '../src/core/compat.mjs'
 import { hasChecks, EXPECTATIONS } from '../src/core/acceptance.mjs'
+import { curriculumFor } from '../src/core/curriculum.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '..')
@@ -136,6 +137,16 @@ function render(catalogue = SCENARIOS) {
           ? `- 验收：\`ensp verify ${id} --topology ${id}.topo\`（${EXPECTATIONS[id].length} 条断言）`
           : `- 验收：\`ensp verify ${id} --topology ${id}.topo\`（无专门断言，逐条跑本场景的验证命令）`
         out.push(verifyLine)
+      }
+
+      // Which vendor manual chapter teaches this scenario, when one does.
+      const chapters = curriculumFor(id)
+      if (chapters.length) {
+        out.push('', '**教材章节**')
+        for (const chapter of chapters) {
+          const where = `${chapter.level} · ${chapter.title}（手册第 ${chapter.page} 页）`
+          out.push(`- ${where}`)
+        }
       }
       out.push('')
     }

@@ -139,6 +139,21 @@ ensp preset --knowledge LSA         # search the index by keyword
 
 The points are grouped by topic by hand: each one is a checkable statement rather than a copied entry. The index keeps only the stem and the correct option text; the source material is not shipped.
 
+### Manual chapter index
+
+`src/core/curriculum.json` records the chapter structure of the vendor lab manuals: the learning goals of each chapter, the `display` commands the manual uses to prove the result, and the built-in scenario that covers the same ground. A scenario detail lists the matching chapters, so you can compare your configuration against the official steps.
+
+```bash
+ensp preset ospf-lsa-types          # the detail ends with a manual chapter section
+ensp preset --syllabus MPLS         # search the chapter index by keyword
+```
+
+The manual text is vendor documentation and is not shipped; the index keeps only the structured facts. The generator reads extracted chapter JSON:
+
+```bash
+npm run curriculum -- <guides.json>
+```
+
 ### Device image check
 
 Some models have a catalogue entry without a shipped image, most notably `USG6000V` (its component has to be selected during eNSP installation). Such models can be placed on the canvas and saved to a `.topo`, but eNSP renders the topology and then quits, which shows up as consoles that never answer.
@@ -271,9 +286,10 @@ ensp status
 
 | Item | Requirement |
 |---|---|
-| OS | Windows. eNSP has no other build |
+| OS | Windows. eNSP has no other build, which is why the plugin declares `win32` only |
 | eNSP | Installed and working |
 | Node.js | 18 or newer |
+| DSH | 0.2.0 up to but not including 0.3.0 (`engines.dsh` decides compatibility) |
 | Privileges | Run both this tool and eNSP as administrator, at the same integrity level |
 
 The eNSP and VirtualBox install locations are detected automatically: `--exe` / `--vbox` first, then the `DSH_ENSP_EXE` / `DSH_VBOX` environment variables, then the `HKLM\SOFTWARE\Huawei\eNSP` registry key, then the usual install roots and `PATH`. Nothing needs configuring when either is installed on another drive, and a failed lookup lists every location it tried together with where that location came from.

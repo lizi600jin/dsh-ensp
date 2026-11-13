@@ -131,6 +131,14 @@ export {
 } from './knowledge.mjs'
 
 export {
+  curriculumLevels,
+  curriculumChapters,
+  curriculumFor,
+  searchCurriculum,
+  renderCurriculum,
+} from './curriculum.mjs'
+
+export {
   resolveEnspExe,
   resolveVBoxManage,
   resolveEnspRoot,

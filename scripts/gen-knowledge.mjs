@@ -2,7 +2,7 @@
  * Regenerate `src/core/knowledge.json`.
  *
  * Usage:
- *   node scripts/gen-knowledge.mjs <source.json>
+ *   node scripts/gen-knowledge.mjs <source.json> [more.json ...]
  *
  * The source is any array of `{ n, type, stem, options: [{key, text}], answer,
  * analysis, topics }`. It is not part of this package; what ships is the index
@@ -44,8 +44,9 @@ const TOPIC_SCENARIOS = {
   mpls: ['mpls-basic', 'mpls-l3vpn'],
   ipv6: ['ipv6', 'ospfv3-ipv6'],
   qos: ['qos-basics'],
+  management: ['network-management'],
   reliability: ['vrrp-basics', 'bfd-fast-convergence', 'firewall-hrp', 'dual-homed-isp'],
-  security: ['acl-filter', 'aaa-local', 'ipsec-vpn', 'firewall-zones', 'firewall-hrp', 'arp-security', 'dhcp-snooping'],
+  security: ['acl-filter', 'aaa-local', 'ipsec-vpn', 'firewall-zones', 'firewall-hrp', 'arp-security', 'dhcp-snooping', 'port-security'],
 }
 
 /** Keywords that decide which topic a question belongs to. */
@@ -58,6 +59,7 @@ const TOPIC_TERMS = {
   mpls: ['mpls', 'ldp', 'lsr', '标签', 'vpn-instance'],
   ipv6: ['ipv6', 'ospfv3', 'slaac'],
   qos: ['qos', '队列', '拥塞', '流量监管', '优先级映射'],
+  management: ['网络管理', '网管', 'snmp', 'ntp', '日志', 'info-center', 'netconf', 'telemetry'],
   reliability: ['vrrp', 'bfd', 'hrp', '双机热备', '主备'],
   security: ['acl', '安全区域', 'security-policy', 'ipsec', 'ike', 'aaa', 'radius', '防火墙', 'nat'],
 }
@@ -65,8 +67,15 @@ const TOPIC_TERMS = {
 /** A question phrased this way keeps only a false statement once stripped. */
 const NEGATIVE = /错误的是|不正确的是|不属于|不支持|不能|无需/
 
-/** Points kept per topic. Enough to cover the vocabulary, short enough to read. */
-const MAX_POINTS = 8
+/**
+ * Points kept per topic.
+ *
+ * The brief renders at most ten of them, so this cap is about how much depth a
+ * topic carries into the index, not about screen space. It has to be generous:
+ * every source that feeds the index contributes its own best rows, and a tight
+ * cap lets a later source push out an earlier one entirely.
+ */
+const MAX_POINTS = 24
 
 /** A question must score at least this many keyword hits to be filed at all. */
 const MIN_SCORE = 2
@@ -78,24 +87,39 @@ const clip = (s, n) => (s.length <= n ? s : s.slice(0, n - 1).replace(/[，,、�
  * The answer as readable text.
  *
  * A bare key list (`A,C`) teaches nothing, so every chosen option is spelled out.
- * Returns '' when the answer is not machine-readable, which is the case for the
- * drag-and-drop and fill-in-the-blank questions.
+ * When the option text is unusable the explanation carries the fact instead: it
+ * is the part a reader can actually learn from, and dropping the question because
+ * its options came back blank throws away the answer along with them. Returns ''
+ * only when neither source says anything.
  */
 function answerText(q) {
   const keys = clean(q.answer).toUpperCase().match(/[A-Z]/g)
-  if (!keys || !q.options?.length) return q.type === '判断题' ? clean(q.answer) : ''
-  const picked = q.options.filter((o) => keys.includes(String(o.key).toUpperCase()))
-  if (!picked.length) return ''
-  return picked.map((o) => `${o.key}. ${clip(clean(o.text), 70)}`).join(' / ')
+  const picked = (q.options || []).filter(
+    (o) => keys?.includes(String(o.key).toUpperCase()) && clean(o.text).replace(/^[.、\s]*$/, ''),
+  )
+  if (picked.length) {
+    return picked.map((o) => `${o.key}. ${clip(clean(o.text), 70)}`).join(' / ')
+  }
+  const explained = clean(q.analysis)
+  if (explained.length >= 12) return clip(explained, 130)
+  if (q.type === '判断题') return clean(q.answer) || ''
+  return ''
 }
 
 /**
  * Build the index.
  *
- * @param {Array<object>} source
+ * Two sources feed one topic's points: the keyword pass over the raw questions,
+ * and `carry` rows that are already in the shipped shape (`{topic, n, q, a}`).
+ * The carry path exists because the index is built from more than one source
+ * over time, and rebuilding from a single source would silently drop whatever
+ * the other one contributed.
+ *
+ * @param {Array<object>} source raw questions
+ * @param {Array<{topic: string, n: number, q: string, a: string}>} [carry] points to keep as-is
  * @returns {object}
  */
-export function buildIndex(source) {
+export function buildIndex(source, carry = []) {
   const perTopic = {}
   for (const q of source) {
     const answer = answerText(q)
@@ -117,18 +141,30 @@ export function buildIndex(source) {
   }
 
   const topics = {}
-  for (const [topic, rows] of Object.entries(perTopic)) {
+  for (const topic of new Set([...Object.keys(perTopic), ...carry.map((c) => c.topic)])) {
+    const rows = perTopic[topic] || []
     // Highest keyword score first, then the shortest stem: a one-line question
     // states a fact, while a long one describes a scene.
     const ranked = rows.slice().sort((a, b) => b.score - a.score || a.q.length - b.q.length)
     const seen = new Set()
     const points = []
+    // Carried points go first. They were already reviewed when they shipped, so a
+    // later source adds to them rather than displacing them; the alternative
+    // silently traded an established fact for a new one that scored higher.
+    for (const c of carry) {
+      if (c.topic !== topic) continue
+      if (points.length >= MAX_POINTS) break
+      const key = c.q.slice(0, 40) + '|' + c.a.slice(0, 30)
+      if (seen.has(key)) continue
+      seen.add(key)
+      points.push({ n: c.n, q: c.q, a: c.a })
+    }
     for (const r of ranked) {
+      if (points.length >= MAX_POINTS) break
       const key = r.q.slice(0, 40) + '|' + r.a.slice(0, 30)
       if (seen.has(key)) continue
       seen.add(key)
       points.push({ n: r.n, q: r.q, a: r.a })
-      if (points.length >= MAX_POINTS) break
     }
     topics[topic] = { scenarios: TOPIC_SCENARIOS[topic], points }
   }
@@ -143,15 +179,18 @@ const invokedDirectly =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 
 if (invokedDirectly) {
-  const sourcePath = process.argv[2]
-  if (!sourcePath) {
-    console.error('usage: node scripts/gen-knowledge.mjs <source.json>')
+  const args = process.argv.slice(2)
+  const carryPath = args.find((a) => a.startsWith('--carry='))?.slice('--carry='.length)
+  const sourcePaths = args.filter((a) => !a.startsWith('--'))
+  if (!sourcePaths.length) {
+    console.error('usage: node scripts/gen-knowledge.mjs [--carry=index.json] <source.json> [more.json ...]')
     process.exit(2)
   }
-  const source = JSON.parse(readFileSync(sourcePath, 'utf8'))
-  const index = buildIndex(source)
+  const source = sourcePaths.flatMap((p) => JSON.parse(readFileSync(p, 'utf8')))
+  const carry = carryPath ? JSON.parse(readFileSync(carryPath, 'utf8')) : []
+  const index = buildIndex(source, carry)
   const target = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'core', 'knowledge.json')
   writeFileSync(target, JSON.stringify(index, null, 1) + '\n', 'utf8')
   const total = Object.values(index.topics).reduce((sum, t) => sum + t.points.length, 0)
-  console.log(`wrote src/core/knowledge.json (${total} points)`)
+  console.log(`wrote src/core/knowledge.json (${total} points from ${source.length} questions)`)
 }

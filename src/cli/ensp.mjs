@@ -36,6 +36,7 @@ import { runAcceptance, formatAcceptance, hasChecks, planFor } from '../core/acc
 import { pushConfig } from '../core/provision.mjs'
 import { SCENARIOS, SCENARIO_IDS, byLevel, renderScenario, searchScenarios } from '../core/presets.mjs'
 import { knowledgeFor, renderKnowledge, searchKnowledge } from '../core/knowledge.mjs'
+import { curriculumFor, renderCurriculum, searchCurriculum } from '../core/curriculum.mjs'
 import {
   LAB_IDS,
   buildScenarioTopology,
@@ -65,7 +66,7 @@ ${C.bold('USAGE')}
   ensp verify  <scenario-id> --topology <topology.topo> [--json] [--wait MS]
   ensp probe   [--json]
   ensp stop    [--topology <topology.topo>]
-  ensp preset  [<id>] [--search <keyword>] [--topo <out.topo>] [--json]
+  ensp preset  [<id>] [--search <keyword>] [--syllabus <keyword>] [--topo <out.topo>] [--json]
   ensp mcp     (start the MCP server on stdio)
 
 ${C.bold('OPTIONS')}
@@ -75,6 +76,8 @@ ${C.bold('OPTIONS')}
   --device NAME     apply only to one device
   --timeout MS      per-device readiness timeout (default 240000)
   --wait MS         verify: how long a failing assertion may keep being retried (default 60000)
+  --syllabus KW     search the vendor manual chapter index (goals and verification commands)
+  --knowledge KW    search the term index (short answers filed by topic)
   --topo PATH       write the scenario's topology blueprint to a .topo file
   --topology PATH   the .topo file that is running (doctor, verify)
   --exe PATH        full path to eNSP_Client.exe (default: auto-detect via registry and install roots)
@@ -92,6 +95,7 @@ ${C.bold('EXAMPLES')}
   ensp up lab.topo --exe "C:/Program Files/Huawei/eNSP/eNSP_Client.exe"
   ensp probe
   ensp preset --search ospf
+  ensp preset --syllabus "MPLS"
   ensp preset ospf-single
   ensp preset campus-network --topo campus.topo
   ensp mcp
@@ -321,6 +325,24 @@ async function cmdStatus({ flags }) {
 async function cmdPreset({ positional, flags }) {
   const id = positional[0]
 
+  if (flags.syllabus) {
+    const hits = searchCurriculum(String(flags.syllabus))
+    if (flags.json) {
+      console.log(JSON.stringify(hits, null, 2))
+      return hits.length ? 0 : 1
+    }
+    if (!hits.length) {
+      console.log(C.yellow('no manual chapter matched') + ` "${flags.syllabus}"`)
+      return 1
+    }
+    for (const h of hits) {
+      console.log(`${C.bold(h.level)} ${h.title} ${C.dim('p' + h.page)}`)
+      if (h.scenarios?.length) console.log(C.dim(`  场景: ${h.scenarios.join(', ')}`))
+      if (h.verify?.length) console.log(C.dim(`  验证: ${h.verify.slice(0, 3).join(' / ')}`))
+    }
+    return 0
+  }
+
   if (flags.knowledge) {
     const hits = searchKnowledge(String(flags.knowledge))
     if (flags.json) {
@@ -411,7 +433,19 @@ async function cmdPreset({ positional, flags }) {
 
     const text = renderScenario(id)
     const points = knowledgeFor(id)
-    console.log(flags.json ? JSON.stringify({ ...SCENARIOS[id], knowledge: points }, null, 2) : text)
+    const chapters = curriculumFor(id).map((c) => ({
+      level: c.level,
+      title: c.title,
+      page: c.page,
+      verify: c.verify,
+    }))
+    console.log(
+      flags.json
+        ? JSON.stringify({ ...SCENARIOS[id], knowledge: points, curriculum: chapters }, null, 2)
+        : text,
+    )
+    const taught = renderCurriculum(id)
+    if (taught) console.log(taught)
     const knowledge = renderKnowledge(id)
     if (knowledge) console.log(knowledge)
     if (hasLab(id)) {

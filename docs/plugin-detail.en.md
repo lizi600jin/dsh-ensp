@@ -10,8 +10,7 @@ Automation for Huawei eNSP: generate topologies, boot devices, push configuratio
 - Checks that every device image is installed before launching, and names the missing component instead of letting eNSP open the topology and quit silently
 - Runs seven preflight checks (images, ports, memory, input injection), each with a stated fix, then verifies the scenario against what the devices actually report
 - Must run elevated, with the eNSP window visible (see the run-permissions section in the repository documentation)
+- Each scenario points at the vendor manual chapter that teaches it, with that chapter's goals and the display commands it uses to prove the result; the index is searchable
 - Usable as a CLI, an MCP server, or a DeepSeek Harness plugin
-
-Scroll down and open "dsh-ensp>" under the included components to reach its settings.
 
 Full documentation: [repository](https://github.com/lizi600jin/dsh-ensp#readme).

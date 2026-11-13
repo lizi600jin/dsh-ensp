@@ -1,6 +1,6 @@
 {
   "name": "dsh-ensp",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Automate Huawei eNSP labs: generate .topo files, start and stop devices, and push configuration one command at a time with per-command error reporting.",
   "keywords": [
     "dsh",
@@ -27,7 +27,9 @@
     "./provision": "./src/core/provision.mjs",
     "./presets": "./src/core/presets.mjs",
     "./calibrate": "./src/core/calibrate.mjs",
-    "./mcp": "./src/mcp/server.mjs"
+    "./mcp": "./src/mcp/server.mjs",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "bin": {
     "ensp": "src/cli/ensp.mjs",
@@ -35,6 +37,7 @@
   },
   "files": [
     "src",
+    "locale/*.json",
     "docs",
     "scripts",
     "cordis.patch.yml",
@@ -48,14 +51,19 @@
     "probe": "node src/cli/ensp.mjs probe",
     "docs": "node scripts/gen-scenarios-doc.mjs",
     "docs:check": "node scripts/gen-scenarios-doc.mjs --check",
-    "knowledge": "node scripts/gen-knowledge.mjs"
+    "knowledge": "node scripts/gen-knowledge.mjs",
+    "curriculum": "node scripts/gen-curriculum.mjs"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18",
+    "dsh": ">=0.2.0 <0.3.0"
   },
   "dsh": {
     "bundle": {
-      "patch": "./cordis.patch.yml"
+      "patch": "./cordis.patch.yml",
+      "platforms": [
+        "win32"
+      ]
     }
   },
   "author": {

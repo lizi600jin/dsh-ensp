@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "华为 eNSP 实验台",
+    "description": "生成 eNSP 拓扑、启动设备，并逐条下发配置后验收结果。",
+    "detail": "docs/plugin-detail.zh.md"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Huawei eNSP labs",
+    "description": "Builds eNSP topologies, boots the devices and pushes configuration with verification.",
+    "detail": "docs/plugin-detail.en.md"
+  }
+}

@@ -41,6 +41,7 @@ import { calibrateAnchors, inspectAnchors, DEFAULT_ANCHORS } from '../core/calib
 import { doctor, modelsOf } from '../core/doctor.mjs'
 import { runAcceptance, hasChecks, EXPECTATIONS } from '../core/acceptance.mjs'
 import { knowledgeFor, searchKnowledge, knowledgeTopics } from '../core/knowledge.mjs'
+import { curriculumFor, renderCurriculum, searchCurriculum } from '../core/curriculum.mjs'
 import { pushConfig, pushConfigMany, queryDevice } from '../core/provision.mjs'
 import { SCENARIOS, SCENARIO_IDS, byLevel, renderScenario, searchScenarios } from '../core/presets.mjs'
 import { PACKAGE_NAME, VERSION } from '../core/version.mjs'
@@ -327,12 +328,13 @@ const TOOLS = [
       if (!SCENARIOS[id]) throw new Error(`unknown scenario "${id}"`)
       return {
         id,
-        brief: renderScenario(id),
+        brief: renderScenario(id) + renderCurriculum(id),
         data: SCENARIOS[id],
         hasTopology: hasLab(id),
         hasCuratedChecks: hasChecks(id),
         ...(hasLab(id) ? { devices: labDevices(id), addressing: labAddressing(id) } : {}),
         knowledge: knowledgeFor(id),
+        curriculum: curriculumFor(id),
       }
     },
   },
@@ -386,13 +388,22 @@ const TOOLS = [
     inputSchema: obj({
       query: { type: 'string', description: 'keyword, e.g. "LSA" or "MED"' },
       scenario: { type: 'string', description: 'scenario id, to list what that lab teaches' },
+      syllabus: { type: 'string', description: 'keyword to search the manual chapter index instead' },
     }),
-    async run({ query, scenario }) {
+    async run({ query, scenario, syllabus }) {
+      if (syllabus) {
+        return { syllabus, chapters: searchCurriculum(syllabus) }
+      }
       if (scenario) {
         if (!SCENARIOS[scenario]) throw new Error(`unknown scenario "${scenario}"`)
-        return { scenario, topics: knowledgeTopics(), points: knowledgeFor(scenario) }
+        return {
+          scenario,
+          topics: knowledgeTopics(),
+          points: knowledgeFor(scenario),
+          curriculum: curriculumFor(scenario),
+        }
       }
-      if (!query) throw new Error('pass query or scenario')
+      if (!query) throw new Error('pass query, scenario or syllabus')
       return { query, points: searchKnowledge(query) }
     },
   },

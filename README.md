@@ -134,6 +134,21 @@ ensp preset --knowledge LSA         # 按关键词检索知识点
 
 知识点按主题人工归类：每条是一句可核对的事实，而不是照搬原始条目。索引只保留题干与正确选项文本，原始资料不随包分发。
 
+### 教材章节索引
+
+`src/core/curriculum.json` 记录厂商实验手册的章节结构：每章的学习目标、手册里用来证明结果的 `display` 命令，以及本章对应的内置场景。场景详情会附上对应章节，因此可以直接对照官方步骤检查自己的配置。
+
+```bash
+ensp preset ospf-lsa-types          # 详情里带「官方教材对应章节」小节
+ensp preset --syllabus MPLS         # 按关键词检索章节索引
+```
+
+手册正文是厂商文档，不随包分发；索引只保留章名、目标与验证命令这些结构化事实。生成脚本读取抽取后的章节 JSON：
+
+```bash
+npm run curriculum -- <guides.json>
+```
+
 ```bash
 npm run docs          # 重新生成 docs/SCENARIOS.md
 npm run docs:check    # 只检查是否过期
@@ -271,9 +286,10 @@ ensp status
 
 | 项 | 要求 |
 |---|---|
-| 操作系统 | Windows。eNSP 仅有 Windows 版本 |
+| 操作系统 | Windows。eNSP 仅有 Windows 版本，插件因此只声明 `win32` |
 | eNSP | 已安装且可正常运行 |
 | Node.js | 18 或更高版本 |
+| DSH | 0.2.0 到 0.3.0 之前的版本（`engines.dsh` 决定兼容性） |
 | 权限 | 以管理员身份运行本工具与 eNSP，两者需为同一权限级别 |
 
 eNSP 与 VirtualBox 的安装位置自动探测：先看 `--exe` / `--vbox`，再看 `DSH_ENSP_EXE` / `DSH_VBOX` 环境变量，再看注册表 `HKLM\SOFTWARE\Huawei\eNSP`，最后看常见安装根目录与 `PATH`。装在非默认盘符时不必手工配置，探测失败会列出每一个尝试过的位置及其来源。

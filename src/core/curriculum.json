@@ -1,0 +1,1163 @@
+{
+ "version": 1,
+ "levels": {
+  "HCIA": [
+   {
+    "level": "HCIA",
+    "title": "华为网络设备基本操作",
+    "page": 9,
+    "scenarios": [
+     "vlan-access",
+     "trunk-interconnect"
+    ],
+    "goals": [
+     "理解命令行视图的含义，以及进入、离开命令行视图的方法",
+     "掌握一些常见的命令",
+     "掌握使用命令行在线帮助的方法",
+     "掌握如何撤销命令",
+     "掌握如何使用命令行快捷键",
+     "配置文件保存成功！"
+    ],
+    "verify": [
+     "display current-configuration",
+     "display version",
+     "display startup"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "VLAN 配置实验",
+    "page": 21,
+    "scenarios": [
+     "vlan-access",
+     "trunk-interconnect",
+     "vlanif-routing",
+     "super-vlan"
+    ],
+    "goals": [
+     "掌握VLAN 的创建方法",
+     "掌握Access、Trunk 和Hybrid 类型接口的配置方法",
+     "掌握基于接口划分VLAN 的配置方法",
+     "掌握基于MAC 地址划分VLAN 的配置方法",
+     "掌握MAC 地址表及VLAN 信息的查看方式",
+     "配置交换机基于接口划分VLAN"
+    ],
+    "verify": [
+     "ping 192.168.1.3",
+     "display vlan",
+     "display mac-vlan vlan 3",
+     "display arp",
+     "display mac-address",
+     "ping 192.168.1.4",
+     "ping 192.168.1.251"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "生成树配置实验",
+    "page": 41,
+    "scenarios": [
+     "stp-rstp",
+     "mstp-load-balance"
+    ],
+    "goals": [
+     "掌握启用和禁用STP/RSTP 的方法",
+     "掌握修改交换机STP 模式的方法",
+     "掌握修改桥优先级，控制根桥选举的方法",
+     "掌握修改端口优先级，控制根端口和指定端口选举的方法",
+     "掌握修改端口开销，控制根端口和指定端口选举的方法",
+     "掌握边缘端口的配置方法"
+    ],
+    "verify": [
+     "display stp",
+     "display stp brief"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "以太网链路聚合实验",
+    "page": 54,
+    "scenarios": [
+     "link-aggregation"
+    ],
+    "goals": [
+     "掌握使用手动模式配置链路聚合的方法",
+     "掌握使用静态LACP 模式配置链路聚合的方法",
+     "掌握控制静态LACP 模式下控制活动链路的方法",
+     "掌握静态LACP 的部分特性的配置",
+     "配置手工模式链路聚合",
+     "配置LACP 模式链路聚合"
+    ],
+    "verify": [
+     "display eth-trunk 1"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "直连路由实验",
+    "page": 65,
+    "scenarios": [
+     "vlanif-routing"
+    ],
+    "goals": [
+     "配置Dot1q 终结功能和IP 地址后，设备也会添加相应的MAC 表项并置位三层转发标志",
+     "掌握通过配置Dot1q 终结子接口方法实现VLAN 间互访",
+     "掌握通过配置VLANIF 接口方法实现VLAN 间互访",
+     "配置Dot1q 终结子接口实现VLAN 间互访",
+     "配置VLANIF 接口实现VLAN 间互访",
+     "配置默认路由，相当于给设备配置了网关。"
+    ],
+    "verify": [
+     "ping 192.168.3.1",
+     "tracert 192.168.3.1"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "静态路由实验",
+    "page": 72,
+    "scenarios": [
+     "static-route"
+    ],
+    "goals": [
+     "掌握接口IPv4 地址的配置方法",
+     "理解LoopBack 接口的作用与含义",
+     "理解直连路由的产生原则",
+     "掌握静态路由的配置方法并理解其生效的条件",
+     "掌握通过Ping 工具测试网络层连通性",
+     "掌握并理解特殊静态路由的配置方法与应用场景"
+    ],
+    "verify": [
+     "display ip interface brief",
+     "display ip routing-table",
+     "ping 10.0.12.1",
+     "ping 10.0.23.3",
+     "ping -a 10.0.2.2 10.0.1.1",
+     "tracert -a 10.0.2.2 10.0.1.1"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "IP 地址自动配置实验",
+    "page": 88,
+    "scenarios": [
+     "dhcp",
+     "dhcp-snooping"
+    ],
+    "goals": [
+     "配置IP 地址，通过DHCP 方式静态分配机制避免人工配置发生错误，方便管理员统一维",
+     "掌握DHCP 全局地址池的配置方法",
+     "掌握通过DHCP 分配静态IP 地址的方法",
+     "配置DHCP 服务器",
+     "配置DHCP 客户端",
+     "配置DHCP Relay"
+    ],
+    "verify": [
+     "display interface GE 1/0/1",
+     "display ip interface GE 0/0/2",
+     "display dhcp client interface GE 0/0/2",
+     "display ip routing-table",
+     "display ip pool name for_r1 used",
+     "display ip interface GE 1/0/1",
+     "display ip pool name for_s1 used",
+     "ping 10.0.12.254"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "OSPF 配置实验",
+    "page": 101,
+    "scenarios": [
+     "ospf-single"
+    ],
+    "goals": [
+     "掌握OSPF 的基本配置命令",
+     "掌握如何查看OSPF 的运行状态",
+     "掌握如何通过Cost 控制OSPF 选路",
+     "掌握OSPF 发布默认路由的方法",
+     "掌握OSPF 认证配置方法",
+     "配置OSPF 认证"
+    ],
+    "verify": [
+     "display ospf peer",
+     "display ip routing-table protocol ospf",
+     "display ospf peer brief",
+     "display this",
+     "display ip routing-table",
+     "ping 10.0.12.1",
+     "ping 10.0.23.3",
+     "ping -a 10.0.2.2 10.0.1.1",
+     "tracert -a 10.0.2.2 10.0.3.3"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "IPv6 地址配置实验",
+    "page": 118,
+    "scenarios": [
+     "ipv6",
+     "ospfv3-ipv6"
+    ],
+    "goals": [
+     "掌握静态IPv6 地址的配置方法",
+     "掌握IPv6 无状态地址配置方法",
+     "掌握IPv6 静态路由的配置方法",
+     "掌握IPv6 相关信息查看方法",
+     "配置静态IPv6 地址",
+     "配置IPv6 无状态地址分配"
+    ],
+    "verify": [
+     "display ipv6 interface GE 1/0/1",
+     "display ipv6 interface GE 0/0/1",
+     "display ipv6 interface GE 0/0/2",
+     "display ipv6 neighbors GE 0/0/2",
+     "display ipv6 routing-table",
+     "ping ipv6 FE80::B2C7:87FF:FE33:D660 -i GE 1/0/1",
+     "ping ipv6 2000:23::2",
+     "ping ipv6 2000::2"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "ACL 配置实验",
+    "page": 129,
+    "scenarios": [
+     "acl-filter",
+     "nat"
+    ],
+    "goals": [
+     "掌握ACL 的配置方法",
+     "掌握ACL 在接口下的应用方法",
+     "掌握流量过滤的基本方式",
+     "配置设备IP 地址",
+     "配置OSPF，使得网络路由可达",
+     "配置ACL，匹配特定流量"
+    ],
+    "verify": [
+     "ping -a 10.0.1.1 10.0.23.3",
+     "ping -a 10.1.1.1 10.0.23.3"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "文件管理实验",
+    "page": 136,
+    "scenarios": [
+     "aaa-local",
+     "network-management"
+    ],
+    "goals": [
+     "理解建立FTP 连接的过程",
+     "掌握FTP 服务器参数的配置",
+     "掌握与FTP 服务器传输文件的方法",
+     "配置FTP 服务器功能及参数",
+     "配置本地FTP 用户",
+     "配置FTP 用户的级别。"
+    ],
+    "verify": []
+   },
+   {
+    "level": "HCIA",
+    "title": "远程登录实验",
+    "page": 144,
+    "scenarios": [
+     "aaa-local",
+     "network-management"
+    ],
+    "goals": [
+     "掌握本地AAA 认证授权方案的配置方法",
+     "掌握创建域的方法",
+     "掌握本地用户的创建方法",
+     "理解基于域的用户管理的原理",
+     "配置AAA 方案",
+     "配置本地用户"
+    ],
+    "verify": [
+     "display users",
+     "display aaa configuration",
+     "display vty ip-block all",
+     "display ssh server ip-block all",
+     "display local-user username hcia@datacom"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "NAT 配置实验",
+    "page": 156,
+    "scenarios": [
+     "nat",
+     "acl-filter"
+    ],
+    "goals": [
+     "掌握NAPT 的配置方法",
+     "掌握Easy IP 的配置方法",
+     "掌握NAT Server 的配置方法",
+     "配置NAPT",
+     "配置Easy IP",
+     "配置NAT Server"
+    ],
+    "verify": [
+     "display session all verbose",
+     "ping -c 1000 100.0.23.3"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "WAC+FIT AP 组网实验",
+    "page": 164,
+    "scenarios": [
+     "wlan-basic",
+     "wlan-roaming"
+    ],
+    "goals": [
+     "掌握FIT AP 上线的配置方法",
+     "掌握各种无线模板配置命令",
+     "掌握WLAN 配置的基本流程",
+     "配置参数",
+     "配置有线网络侧互通",
+     "配置AP1 上线："
+    ],
+    "verify": [
+     "display ap all",
+     "display vap all",
+     "display station all",
+     "display lldp neighbor interface GE 1/0/4",
+     "display ip pool interface Vlanif101 used"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "网络编程自动化实验(可选)",
+    "page": 179,
+    "scenarios": [
+     "network-management"
+    ],
+    "goals": [
+     "掌握Python 基本语法",
+     "掌握paramiko 基本方法"
+    ],
+    "verify": []
+   },
+   {
+    "level": "HCIA",
+    "title": "网络故障排除实验",
+    "page": 188,
+    "scenarios": [
+     "ospf-troubleshooting",
+     "bgp-troubleshooting"
+    ],
+    "goals": [
+     "掌握园区网络故障处理基本流程",
+     "掌握园区网络故障排查命令",
+     "配置参数"
+    ],
+    "verify": [
+     "display ip interface Vlanif 101",
+     "display interface brief | include up",
+     "display vlan",
+     "display this",
+     "display ip pool interface Vlanif101",
+     "display interface Vlanif 101",
+     "display ip interface brief",
+     "display ip routing-table",
+     "display ap all",
+     "display ap online-fail-record all"
+    ]
+   },
+   {
+    "level": "HCIA",
+    "title": "园区网络综合实验",
+    "page": 220,
+    "scenarios": [
+     "campus-network",
+     "vlanif-routing",
+     "static-route"
+    ],
+    "goals": [
+     "掌握园区二层网络的配置方法",
+     "掌握园区三层网络的配置方法",
+     "掌握园区无线网络的配置方法",
+     "掌握园区网络安全与服务的配置方法",
+     "配置交换机、WAC 和路由器的接口和VLAN，配置三层接口地址、路由，使得网络互通",
+     "配置核心交换机的DHCP 功能，使交换机作为DHCP 服务器为AP 和无线/有线用户分配"
+    ],
+    "verify": [
+     "display lldp neighbor brief",
+     "display vlan",
+     "display stp brief",
+     "display lldp neighbor interface GE 1/0/4",
+     "display ip interface Vlanif 101",
+     "display ip pool interface Vlanif3 used",
+     "display ip pool interface Vlanif101 used",
+     "display ospf peer brief",
+     "display ip routing-table",
+     "display ap all"
+    ]
+   }
+  ],
+  "HCIP": [
+   {
+    "level": "HCIP",
+    "title": "IGP 高级特性实验",
+    "page": 6,
+    "scenarios": [
+     "ospf-troubleshooting",
+     "bfd-fast-convergence",
+     "isis-multi-level"
+    ],
+    "goals": [
+     "实现部署FRR、BFD 加快OSPF 收敛速度",
+     "实现对OSPF 出方向的LSA 进行过滤的配置",
+     "实现部署区域间路由过滤，减小OSPF LSDB 大小"
+    ],
+    "verify": [
+     "display ospf peer brief",
+     "display ospf routing",
+     "display isis peer",
+     "display isis route",
+     "display ospf routing 10.0.4.4 24",
+     "display ospf routing 10.0.4.4 32",
+     "display ospf bfd session all",
+     "display interface GigabitEthernet 0/0/1",
+     "display ospf bfd session GigabitEthernet 0/0/1",
+     "display ospf peer last-nbr-down"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "OSPF 基础实验",
+    "page": 7,
+    "scenarios": [
+     "ospf-single",
+     "ospf-multi-area",
+     "ospf-lsa-types",
+     "ospf-stub-nssa",
+     "ospf-virtual-link"
+    ],
+    "goals": [
+     "实现单区域OSPF 的配置",
+     "实现OSPF 区域认证的配置",
+     "描述OSPF 在多路访问网络中邻居关系建立的过程",
+     "实现对OSPF 接口代价值进行修改",
+     "阐明OSPF 中Silent-interface 的配置方法",
+     "实现通过display 命令查看OSPF 各种状态"
+    ],
+    "verify": [
+     "display ospf peer",
+     "display ospf routing",
+     "display ospf lsdb",
+     "display ospf lsdb router self-originate",
+     "display ospf lsdb network self-originate",
+     "display ospf routing 10.0.2.2",
+     "display ospf routing 10.0.3.3",
+     "display ospf lsdb router 10.0.2.2",
+     "display ospf routing 10.0.1.1",
+     "display ospf interface GigabitEthernet 0/0/3"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "网络准入控制实验",
+    "page": 11,
+    "scenarios": [
+     "port-security",
+     "aaa-local",
+     "dhcp-snooping"
+    ],
+    "goals": [
+     "配置802.1X 认证",
+     "配置MAC 认证",
+     "配置混合认证",
+     "配置source 地址为67.0.0.2，该地址为和RADIUS 服务器进行通信的源IP 地址，默认为报文",
+     "配置完成后，在当前页面可看到创建的用户信息。",
+     "配置为“Site2_MAC”，配置参数如下："
+    ],
+    "verify": [
+     "display access-user username dot1x detail",
+     "display access-user",
+     "display access-user username 286e-d48a-1345 detail",
+     "display current-configuration"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "BGP 高级特性实验",
+    "page": 27,
+    "scenarios": [
+     "bgp-troubleshooting",
+     "bgp-attributes",
+     "bgp-aggregation"
+    ],
+    "goals": [
+     "实现基于Peer-Group 的BGP 对等体建立",
+     "实现BGP 路由策略配置",
+     "实现BGP 安全特性配置"
+    ],
+    "verify": [
+     "display bgp peer",
+     "display bgp group IBGP",
+     "display bgp routing-table",
+     "display bgp routing-table 10.0.3.1",
+     "display ospf peer brief",
+     "display ospf routing",
+     "display ip routing-table",
+     "ping -c 1 10.0.11.1",
+     "ping -c 1 10.0.12.2",
+     "ping -c 1 10.0.23.2"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "VXLAN 与EVPN 实验",
+    "page": 38,
+    "scenarios": [
+     "spine-leaf-vxlan",
+     "mpls-basic"
+    ],
+    "goals": [
+     "配置静态VXLAN 隧道",
+     "实现配置VXLAN 集中式网关实现跨三层互通",
+     "配置AGG1 与CORE1、CORE1 与AGG2 之间的静态VXLAN 隧道",
+     "配置VXLAN 分布式网关实现跨三层互通",
+     "配置EVPN 实例、IP VPN 实例，并分别绑定到BD、VBDIF 接口中",
+     "理解IPsec VPN 基本原理"
+    ],
+    "verify": [
+     "display interface Vbdif 10",
+     "display interface Vbdif 20",
+     "display current-configuration interface GigabitEthernet0/0/1",
+     "display current-configuration interface vlanif100",
+     "display current-configuration interface vlanif200",
+     "display acl 3100",
+     "display bgp evpn peer",
+     "display bgp evpn all routing-table inclusive-route",
+     "display bgp evpn all routing-table mac-route",
+     "display bgp evpn all routing-table mac-route 0:48:286e-d489-eb64:32:172.16.1.2"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "IPv6 实验",
+    "page": 52,
+    "scenarios": [
+     "ipv6",
+     "ospfv3-ipv6"
+    ],
+    "goals": [
+     "实现MP-BGP 配置",
+     "实现IS-IS 双栈配置",
+     "实现OSPF 双栈配置"
+    ],
+    "verify": [
+     "display ospfv3 peer",
+     "display ospfv3 routing",
+     "display ipv6 routing-table protocol ospfv3",
+     "display BGP IPV6 peer",
+     "display bgp ipv6 peer",
+     "display ipv6 routing-table protocol bgp",
+     "ping ipv6 2001:0db8:11::1",
+     "ping ipv6 2001:0db8:12::2",
+     "ping ipv6 2001:0db8:23::2",
+     "ping ipv6 2001:0db8:34::4"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "IS-IS 基础实验",
+    "page": 75,
+    "scenarios": [
+     "isis-multi-level"
+    ],
+    "goals": [
+     "实现IS-IS 协议基本配置",
+     "实现IS-IS 协议DIS 优先级修改",
+     "实现IS-IS 协议网络类型修改",
+     "实现IS-IS 协议外部路由引入",
+     "实现IS-IS 接口cost 修改",
+     "实现IS-IS 路由渗透配置"
+    ],
+    "verify": [
+     "display isis peer",
+     "display isis route",
+     "display isis interface",
+     "display isis route 192.168.1.1",
+     "display isis route 10.0.1.1",
+     "display isis route 10.0.1.1 32",
+     "display ip routing-table 10.0.5.5",
+     "ping -c 1 10.0.123.2",
+     "ping -c 1 10.0.123.3",
+     "ping -c 1 10.0.24.2"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "VLAN 高级技术实验",
+    "page": 79,
+    "scenarios": [
+     "super-vlan",
+     "port-isolation"
+    ],
+    "goals": [
+     "实现VLAN 聚合的基本配置",
+     "实现MUX VLAN 的基本配置",
+     "实现配置ARP 代理完成Sub-VLAN 之间的通信",
+     "描述ARP 代理实现Sub-VLAN 间通信的过程"
+    ],
+    "verify": [
+     "display mux-vlan",
+     "display arp all",
+     "ping -c 1 172.16.1.10",
+     "ping -c 1 172.16.1.20",
+     "ping -c 1 172.16.200.4",
+     "ping -c 1 172.16.200.3"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "BGP 实验",
+    "page": 89,
+    "scenarios": [
+     "bgp-ebgp-ibgp",
+     "bgp-route-reflector",
+     "bgp-aggregation"
+    ],
+    "goals": [
+     "实现IBGP 的配置",
+     "实现EBGP 的配置",
+     "实现BGP 更新源的配置",
+     "实现EBGP 多跳的配置",
+     "配置AS 64512 内的OSPF。",
+     "配置AS 64512 内的全互联IBGP 对等体关系。"
+    ],
+    "verify": [
+     "display bgp routing-table 10.2.2.0 24",
+     "display bgp routing-table 10.1.1.0 24",
+     "display bgp routing-table",
+     "display bgp peer 10.0.24.4 verbose",
+     "display bgp peer 10.0.24.4 verbose | in Update",
+     "display bgp peer",
+     "display bgp routing-table 172.16.0.0",
+     "display bgp routing-table 172.17.0.0 22",
+     "display bgp routing-table 172.16.1.0 24",
+     "display bgp routing-table 172.16.2.0 24"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "以太网交换安全实验",
+    "page": 91,
+    "scenarios": [
+     "port-security",
+     "arp-security",
+     "dhcp-snooping"
+    ],
+    "goals": [
+     "实现DHCP Snooping 的基本配置",
+     "实现配置IPSG 禁止用户私自修改终端IP 地址",
+     "实现配置端口安全限制终端的接入数量",
+     "实现配置端口隔离限制同网段用户的二层互通"
+    ],
+    "verify": [
+     "display interface GigabitEthernet 0/0/3 | in Hardware",
+     "display interface GigabitEthernet 0/0/4 | in Hardware",
+     "display ip interface brief | in GigabitEthernet0/0/3",
+     "display ip interface brief | in GigabitEthernet0/0/4",
+     "display dhcp snooping user-bind all",
+     "display logbuffer",
+     "display dhcp static user-bind all",
+     "display mac-addresssticky",
+     "display arp all",
+     "ping -c 1 172.16.10.254"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "BGP/MPLS IP VPN 实验",
+    "page": 105,
+    "scenarios": [
+     "mpls-basic",
+     "mpls-l3vpn"
+    ],
+    "goals": [
+     "实现MPLS 配置",
+     "实现MPLS LDP 配置",
+     "实现MPLS VPN 配置"
+    ],
+    "verify": [
+     "display bgp vpnv4 all peer",
+     "display isis peer",
+     "display isis interface",
+     "display isis route",
+     "display current-configuration section vpn-instance",
+     "display ip vpn-instance interface",
+     "display mpls ldp peer",
+     "display mpls lsp",
+     "display ip routing-table",
+     "ping -a 10.0.1.1 10.0.1.2"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "路由策略与路由控制实验",
+    "page": 154,
+    "scenarios": [
+     "route-policy-pbr",
+     "bgp-attributes"
+    ],
+    "goals": [
+     "实现在引入路由时调用Route-Policy 进行路由过滤",
+     "实现使用Route-Policy 设置路由标记以及过滤带标记的路由",
+     "实现使用Filter-Policy 对OSPF 接收的路由进行过滤"
+    ],
+    "verify": [
+     "display ospf peer brief",
+     "display isis peer",
+     "display ospf lsdb",
+     "display ospf lsdb ase 172.16.1.0",
+     "display ospf lsdb ase 172.16.2.0",
+     "display ip routing-table protocol ospf",
+     "display isis route",
+     "ping -c 1 10.0.12.1",
+     "ping -c 1 10.0.23.3",
+     "ping -c 1 10.0.34.3"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "RSTP 与MSTP 实验",
+    "page": 167,
+    "scenarios": [
+     "stp-rstp",
+     "mstp-load-balance",
+     "vrrp-basics"
+    ],
+    "goals": [
+     "实现手动修改桥优先级影响根桥选举",
+     "实现手动修改端口开销值控制根端口选举",
+     "实现手动修改端口优先级控制根端口选举",
+     "实现配置MSTP 以达到不同VLAN 间流量负载均衡",
+     "配置S1 为主根桥、S2 为备份根桥"
+    ],
+    "verify": [
+     "display stp instance 0 brief",
+     "display stp brief",
+     "display stp",
+     "display stp interface GigabitEthernet 0/0/2",
+     "display stp region-configuration",
+     "display stp instance 1 brief",
+     "display stp instance 2 brief",
+     "display lldp neighbor brief"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "组播实验",
+    "page": 179,
+    "scenarios": [
+     "multicast-pim-sm"
+    ],
+    "goals": [
+     "实现开启路由的组播路由功能以转发组播流量",
+     "实现在交换机上开启IGMP Snooping 并手动配置静态路由器端口、成员端口",
+     "实现通过PIM-DM 转发组播流量",
+     "实现修改IGP cost 值影响断言机制的选举结果",
+     "配置R1、R2、R3、R4 之间的OSPF，在互联接口、Loopback0 接口上激活OSPF。",
+     "实现通过PIM-SM 协议转发组播流量"
+    ],
+    "verify": [
+     "display pim neighbor",
+     "display igmp interface GigabitEthernet 0/0/5",
+     "display pim routing-table",
+     "display l2-multicast forwarding-table vlan 1",
+     "display pim bsr-info",
+     "display pim rp-info",
+     "ping multicast -c 10 239.0.0.12",
+     "display ospf peer brief",
+     "display ospf routing",
+     "display ip routing-table 10.0.1.1"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "防火墙技术实验",
+    "page": 208,
+    "scenarios": [
+     "firewall-zones",
+     "nat"
+    ],
+    "goals": [
+     "实现通过命令行配置防火墙安全策略",
+     "实现观察Server-map 理解NAT ALG 工作原理",
+     "配置源NAT、NAT Server。",
+     "配置安全策略，限制Untrust、DMZ 区域之间的访问。",
+     "配置用于访问Internet 的默认路由。",
+     "配置NAPT 用于私网用户(R1)访问Internet，配置NAT Server 将R1 的FTP 服务映射到公"
+    ],
+    "verify": [
+     "display firewall session table verbose destination global 10.0.12.2",
+     "display firewall session table verbose protocol tcp destination-port global 21",
+     "display firewall session table",
+     "display firewall server-map",
+     "ping -c 1 10.0.11.11",
+     "ping -c 1 10.0.12.2",
+     "ping -c 100 10.0.12.2"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "VRRP 实验",
+    "page": 219,
+    "scenarios": [
+     "vrrp-basics"
+    ],
+    "goals": [
+     "实现VRRP 的部署",
+     "实现VRRP 与MSTP 的协同工作",
+     "实现BFD 与VRRP 的联动配置",
+     "配置VLAN10 的VRRP 优先级为120，VLAN20 保持默认的100。",
+     "配置VLAN20 的VRRP 优先级为120，VLAN10 保持默认的100。"
+    ],
+    "verify": [
+     "display vrrp brief",
+     "display vrrp",
+     "display stp region-configuration",
+     "display stp instance 1 brief",
+     "display stp instance 2 brief",
+     "display bfd session all"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "DHCP 实验",
+    "page": 230,
+    "scenarios": [
+     "dhcp",
+     "dhcp-snooping"
+    ],
+    "goals": [
+     "实现部署DHCP Relay 让终端动态获取IP 地址",
+     "实现DHCP 静态地址绑定配置",
+     "配置DHCP Server，创建地址池为终端分配地址，同时创建静态分配地址。",
+     "配置DHCP Relay 设备，在接口下配置DHCP Relay 所代理的DHCP Server IP 地址。"
+    ],
+    "verify": [
+     "display dhcp relay all",
+     "display interface Vlanif 30",
+     "display ip pool name vlan10",
+     "display ip pool name vlan20",
+     "display ip pool name vlan30",
+     "display interface Vlanif 10",
+     "display interface Vlanif 20",
+     "ping -c 1 10.0.40.3",
+     "ping -c 1 10.0.10.3",
+     "ping -c 1 10.0.20.3"
+    ]
+   },
+   {
+    "level": "HCIP",
+    "title": "WLAN 实验",
+    "page": 242,
+    "scenarios": [
+     "wlan-basic",
+     "wlan-roaming"
+    ],
+    "goals": [
+     "实现通过配置漫游组实现AC 间三层漫游",
+     "阐明各种AP 上线的配置方法",
+     "阐明WLAN 配置的基本流程",
+     "配置参数",
+     "配置有线侧相关功能：S3 作为AP 管理流量、无线终端业务流量的网关，AC1、AC2 使用",
+     "配置AC1 上的WLAN 业务，让AP1 上线。"
+    ],
+    "verify": [
+     "display ap all",
+     "display station all",
+     "display ac protect",
+     "display station ssid roam",
+     "display station roam-track sta-mac 5489-986f-73ad",
+     "display mobility-group name mobility"
+    ]
+   }
+  ],
+  "HCIE": [
+   {
+    "level": "HCIE",
+    "title": "IPv4 路由技术",
+    "page": 10,
+    "scenarios": [
+     "ospf-troubleshooting",
+     "isis-multi-level",
+     "bgp-troubleshooting",
+     "bfd-fast-convergence"
+    ],
+    "goals": [
+     "实现部署FRR、BFD 加快OSPF 收敛速度",
+     "实现通过路由策略调整OSPF 路由的开销值",
+     "实现部署区域间路由过滤，减小OSPF LSDB 大小",
+     "配置OSPF",
+     "配置IS-IS",
+     "配置OSPF 与BFD 联动"
+    ],
+    "verify": [
+     "display ospf peer brief",
+     "display ospf routing",
+     "display isis peer",
+     "display isis route 10.0.4.4",
+     "display ospf routing 10.0.5.5 32",
+     "display ospf bfd session all",
+     "display ospf bfd session GigabitEthernet 0/5/0",
+     "display interface brief | include 0/5/0",
+     "display ospf lsdb",
+     "display ospf routing 10.3.3.0"
+    ]
+   },
+   {
+    "level": "HCIE",
+    "title": "MPLS VPN",
+    "page": 52,
+    "scenarios": [
+     "mpls-basic",
+     "mpls-l3vpn",
+     "ipsec-gre-tunnel"
+    ],
+    "goals": [
+     "实现MPLS 配置",
+     "实现MPLS LDP 配置",
+     "实现MPLS VPN 配置",
+     "实现采用不同的方式完成CE-PE 间的路由交换",
+     "实现通过RT 值控制CE 间的路由学习",
+     "配置AS 65100 域内的IS-IS，在互联接口、Loopback0 接口上开启IS-IS，实现域内IGP"
+    ],
+    "verify": [
+     "display mpls ldp adjacency all",
+     "display bgp vpnv4 vpn-instance vpna peer",
+     "display bgp vpnv4 vpn-instance vpna_in routing-table",
+     "display bgp vpnv4 vpn-instance vpna_out routing-table",
+     "display isis peer",
+     "display isis route",
+     "display bgp vpnv4 all peer",
+     "display bgp peer",
+     "display ospf peer brief",
+     "display bgp vpnv4 all routing-table"
+    ]
+   },
+   {
+    "level": "HCIE",
+    "title": "EVPN",
+    "page": 71,
+    "scenarios": [
+     "mpls-basic",
+     "spine-leaf-vxlan"
+    ],
+    "goals": [
+     "实现MPLS 配置",
+     "实现MPLS LDP 配置",
+     "实现EVPN 承载L3VPNv4",
+     "配置AS 65100 域内的IS-IS，在互联接口、Loopback0 接口上开启IS-IS，实现域内IGP",
+     "配置AS 65100 域内的MPLS，全局使能MPLS，配置MPLS LSR ID，在互联接口使能",
+     "配置IS-IS"
+    ],
+    "verify": [
+     "display bgp evpn peer",
+     "display bgp peer",
+     "display bgp vpnv4 vpn-instance vpna peer",
+     "display bgp evpn all routing-table",
+     "display bgp vpnv4 vpn-instance vpna_in routing-table",
+     "display bgp vpnv4 vpn-instance vpna_out routing-table",
+     "display bgp vpnv4 vpn-instance vpna routing-table",
+     "display bgp routing-table",
+     "display isis peer",
+     "display isis route"
+    ]
+   },
+   {
+    "level": "HCIE",
+    "title": "IPv6 路由技术",
+    "page": 91,
+    "scenarios": [
+     "ospfv3-ipv6",
+     "ipv6"
+    ],
+    "goals": [
+     "实现IS-IS For IPv6 配置",
+     "实现OSPFv3 配置",
+     "实现MP-BGP 配置",
+     "配置IS-IS 与OSPFv3 的双向引入",
+     "配置PE1、PE3 为RR 客户端。"
+    ],
+    "verify": [
+     "display ospfv3 peer",
+     "display ospfv3 routing",
+     "display bgp ipv6 peer",
+     "display bgp ipv6 routing-table",
+     "display isis route ipv6 2001::1:5:5",
+     "ping ipv6 -c 1 2001::9",
+     "ping ipv6 -c 1 2001::16",
+     "ping ipv6 -c 1 2001::d",
+     "ping ipv6 -c 1 2001::2",
+     "ping ipv6 -c 1 2001::1a"
+    ]
+   },
+   {
+    "level": "HCIE",
+    "title": "VXLAN 实验",
+    "page": 111,
+    "scenarios": [
+     "spine-leaf-vxlan"
+    ],
+    "goals": [
+     "配置静态VXLAN 隧道",
+     "实现配置VXLAN 集中式网关完成跨三层互通",
+     "配置Border 与Edge_1、Border 与Edge_2 之间的静态VXLAN 隧道",
+     "配置VXLAN 分布式网关",
+     "配置EVPN 实例、IP VPN 实例，并分别绑定到BD、VBDIF 接口中。",
+     "配置EVPN 实例、IP VPN 实例，并分别绑定到BD、VBDIF 接口中"
+    ],
+    "verify": [
+     "display mac-address bridge-domain 10",
+     "display mac-address",
+     "display ip routing-table 192.168.200.2",
+     "ping 192.168.100.254",
+     "display vxlan tunnel",
+     "display vxlan peer",
+     "display ospf peer",
+     "display ospf routing",
+     "display arp | include 192.168.200.2",
+     "display bgp evpn peer"
+    ]
+   },
+   {
+    "level": "HCIE",
+    "title": "VXLAN 虚拟化园区部署",
+    "page": 153,
+    "scenarios": [
+     "spine-leaf-vxlan",
+     "wlan-roaming"
+    ],
+    "goals": [
+     "掌握站点创建及设备上线流程",
+     "掌握Fabric 网络创建、资源部署、Underlay 网络自动化部署流程",
+     "掌握Overlay 网络部署流程",
+     "掌握业务随行及准入控制部署流程",
+     "掌握WLAN 业务部署流程",
+     "配置策略模板：包括RADIUS 服务器、Portal 服务器、认证模板(Portal、802.1X)。"
+    ],
+    "verify": [
+     "display ap all",
+     "display access-user",
+     "display access-user username rd detail",
+     "display access-user username sales detail"
+    ]
+   },
+   {
+    "level": "HCIE",
+    "title": "广域互联网络部署",
+    "page": 257,
+    "scenarios": [
+     "dual-homed-isp",
+     "ipsec-gre-tunnel"
+    ],
+    "goals": [
+     "实现网络模板配置",
+     "实现站点设计配置",
+     "实现DHCP 开局",
+     "实现流量策略配置",
+     "实现安全策略配置",
+     "实现设备纳管。"
+    ],
+    "verify": [
+     "display ospf peer brief",
+     "display ospf routing",
+     "display current-configuration interface vlanif150",
+     "ping -c 1 10.0.0.6",
+     "ping -c 1 10.0.0.2",
+     "ping -c 1 10.0.0.9",
+     "ping -c 1 10.0.0.13",
+     "ping -c 1 10.0.0.17",
+     "ping -c 1 10.0.0.26",
+     "ping -c 1 65.0.0.1"
+    ]
+   },
+   {
+    "level": "HCIE",
+    "title": "SR-MPLS 实验",
+    "page": 336,
+    "scenarios": [
+     "mpls-basic",
+     "mpls-l3vpn"
+    ],
+    "goals": [
+     "实现通过IS-IS 完成PE 之间的路由可达",
+     "实现通过配置SR-MPLS 建立SR LSP",
+     "实现CE 之间互访使用的L3VPN 隧道迭代到SR-MPLS BE 隧道",
+     "配置SR 域内的IS-IS，在互联接口、Loopback0 接口上开启IS-IS，实现SR 域内互通。",
+     "配置MPLS，使能设备MPLS 功能，配置MPLS LSR ID。",
+     "配置PE1、PE4 与P1、P2 之间的MP-IBGP 对等体关系，其中P1、P2 作为RR，反射来"
+    ],
+    "verify": [
+     "display segment-routing prefix mpls forwarding",
+     "display ip routing-table vpn-instance vpna",
+     "display ip routing-table vpn-instance vpna 10.1.4.4 verbose",
+     "display ip routing-table vpn-instance vpna 10.1.4.4 verbose | include TunnelID",
+     "ping -vpn-instance vpna -a 10.1.1.1 10.1.4.4",
+     "display isis peer",
+     "display isis route",
+     "display tunnel-info all",
+     "display bgp vpnv4 all peer",
+     "display bgp vpnv4 all routing-table | include 10.1.4.4"
+    ]
+   },
+   {
+    "level": "HCIE",
+    "title": "SRv6 实验",
+    "page": 399,
+    "scenarios": [
+     "ipv6",
+     "ospfv3-ipv6",
+     "mpls-l3vpn"
+    ],
+    "goals": [
+     "实现通过配置SRv6 Locator 为本地私网路由自动分配SID",
+     "实现CE 之间互访使用的L3VPN 隧道迭代到SRv6 BE 隧道",
+     "配置SR 域内的IS-IS，在互联接口、Loopback0 接口上开启IS-IS，实现SR 域内互通。",
+     "配置L3VPN",
+     "配置RR 时注意关闭对VPNv4 路由的RT 值检查。",
+     "配置SRv6 BE"
+    ],
+    "verify": [
+     "display isis peer",
+     "display isis route",
+     "display bgp vpnv4 all routing-table",
+     "display isis route ipv6",
+     "display segment-routing ipv6 local-sid end-dt4 forwarding",
+     "display bgp vpnv4 all routing-table 10.1.2.2",
+     "display ip routing-table vpn-instance vpna",
+     "display bgp evpn peer",
+     "display segment-routing ipv6 local-sid end forwarding",
+     "display bgp evpn all routing-table prefix-route 0:10.1.1.1:32 | include Prefix"
+    ]
+   },
+   {
+    "level": "HCIE",
+    "title": "网络开放可编程",
+    "page": 441,
+    "scenarios": [
+     "network-management"
+    ],
+    "goals": [
+     "实现使用paramiko 模块SSH 登录设备",
+     "实现使用paramiko 登录设备查看相关配置以及传输文件",
+     "配置ACC_1 VLANIF2 接口的IP 地址。",
+     "配置ACC_1 的互联IP 地址。",
+     "实现通过ncclient 下发配置",
+     "实现通过OPS 完成设备的配置自动创建、删除"
+    ],
+    "verify": [
+     "display current-configuration interface GigabitEthernet 0/0/1",
+     "display this",
+     "ping 192.168.2.1"
+    ]
+   }
+  ]
+ }
+}
