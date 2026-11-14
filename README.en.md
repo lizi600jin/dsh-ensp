@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="https://raw.githubusercontent.com/lizi600jin/dsh-ensp/HEAD/assets/icon.webp" alt="dsh-ensp" width="180" height="180">
+</p>
+
+<p align="center">
   English | <a href="README.md">中文</a>
 </p>
 
