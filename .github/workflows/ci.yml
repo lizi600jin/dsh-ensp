@@ -98,3 +98,72 @@ jobs:
             exit 0
           fi
           node scripts/gen-scenarios-doc.mjs --check
+
+  # The product only runs on Windows (`dsh.bundle.platforms: ["win32"]`), yet the
+  # job above never touches it. Two of the three CI failures before 0.5 were
+  # Linux-only assumptions in the tests, which is the same blind spot seen from
+  # the other side: nothing proved the Windows paths (path probing, the registry
+  # lookup, PowerShell invocation) still worked. This job runs the same suite on
+  # the platform the plugin actually ships for. One Node version is enough here;
+  # the version matrix above is what covers Node compatibility.
+  test-windows:
+    name: Windows (Node 20)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          if (-not (Test-Path package.json)) {
+            Write-Host "::warning::package.json not present yet; skipping install."
+            exit 0
+          }
+          if ((Test-Path package-lock.json) -or (Test-Path npm-shrinkwrap.json)) {
+            npm ci
+          } else {
+            npm install --no-audit --no-fund
+          }
+
+      - name: Syntax check
+        shell: pwsh
+        run: |
+          if (-not (Test-Path src)) {
+            Write-Host "::notice::No src/ directory; skipping syntax check."
+            exit 0
+          }
+          foreach ($dir in @('src', 'scripts')) {
+            if (-not (Test-Path $dir)) { continue }
+            Get-ChildItem -Path $dir -Recurse -Filter *.mjs | ForEach-Object {
+              node --check $_.FullName
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          }
+
+      - name: Test
+        shell: pwsh
+        run: |
+          if (-not (Test-Path package.json)) {
+            Write-Host "::warning::package.json not present yet; skipping tests."
+            exit 0
+          }
+          if (-not (Get-ChildItem -Path tests -Filter *.test.mjs -Recurse -ErrorAction SilentlyContinue)) {
+            Write-Host "::notice::No test files under tests/; nothing to run yet."
+            exit 0
+          }
+          npm test
+
+      - name: Generated docs are current
+        shell: pwsh
+        run: |
+          if (-not (Test-Path scripts/gen-scenarios-doc.mjs)) {
+            Write-Host "::notice::No scenario doc generator; skipping."
+            exit 0
+          }
+          node scripts/gen-scenarios-doc.mjs --check

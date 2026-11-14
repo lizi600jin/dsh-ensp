@@ -6,9 +6,9 @@
  *
  *   1. an explicit override (CLI flag, plugin config, or function argument)
  *   2. `DSH_ENSP_EXE` / `ENSP_EXE` / `DSH_VBOX`
- *   3. the Windows install registry
+ *   3. the Windows install registry, including the Inno Setup uninstall keys
  *   4. the usual install roots
- *   5. `where` on PATH (VBoxManage only)
+ *   5. `where` on PATH
  *
  * Every candidate that was tried is reported on failure, so a wrong override
  * produces a message that says what was looked at instead of a bare ENOENT.
@@ -17,11 +17,28 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
-/** Registry keys an installer may have written the install root to. */
+/**
+ * Registry keys an installer may have written the install root to.
+ *
+ * The Huawei keys are what an eNSP build writes for itself. The Uninstall keys
+ * are what Inno Setup writes, and they are the ones that exist on a normal
+ * installation: `eNSP` carries `InstallPath`, and the GUID key carries
+ * `InstallLocation`. Reading both is what makes an installation outside the
+ * usual four roots findable at all.
+ */
 const ENSP_REGISTRY = [
   ['HKLM\\SOFTWARE\\Huawei\\eNSP', 'InstallPath'],
   ['HKLM\\SOFTWARE\\WOW6432Node\\Huawei\\eNSP', 'InstallPath'],
   ['HKLM\\SOFTWARE\\Huawei\\eNSP', 'InstallDir'],
+  ['HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\eNSP', 'InstallPath'],
+  ['HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\eNSP', 'InstallFullPath'],
+  ['HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\eNSP', 'InstallPath'],
+]
+
+/** VirtualBox writes its own directory here, whatever drive it landed on. */
+const VBOX_REGISTRY = [
+  ['HKLM\\SOFTWARE\\Oracle\\VirtualBox', 'InstallDir'],
+  ['HKLM\\SOFTWARE\\WOW6432Node\\Oracle\\VirtualBox', 'InstallDir'],
 ]
 
 /** Install roots seen on real machines, most common first. */
@@ -52,13 +69,28 @@ function isFile(candidate) {
   }
 }
 
+/**
+ * Registry reads are cached for the life of the process.
+ *
+ * Each `reg query` is a process spawn at roughly 100 ms, and the install paths
+ * cannot change while the tool is running, so repeating them made every path
+ * lookup cost a second for nothing.
+ */
+const registryCache = new Map()
+
 /** Read one string value out of the registry, or null. */
 function registryValue(key, name) {
   if (!isWindows) return null
+  const cacheKey = `${key}\u0000${name}`
+  if (registryCache.has(cacheKey)) return registryCache.get(cacheKey)
   const r = spawnSync('reg', ['query', key, '/v', name], { encoding: 'utf8', windowsHide: true })
-  if (r.status !== 0 || !r.stdout) return null
-  const m = new RegExp(`${name}\\s+REG_\\w+\\s+(.+)`).exec(r.stdout)
-  return m ? m[1].trim() : null
+  let value = null
+  if (r.status === 0 && r.stdout) {
+    const m = new RegExp(`${name}\\s+REG_\\w+\\s+(.+)`).exec(r.stdout)
+    value = m ? m[1].trim() : null
+  }
+  registryCache.set(cacheKey, value)
+  return value
 }
 
 /** Expand `%VAR%` and strip surrounding quotes from a registry value. */
@@ -83,8 +115,10 @@ export function enspCandidates(override) {
     if (v) out.push({ path: v, source: name })
   }
   for (const [key, name] of ENSP_REGISTRY) {
-    const root = cleanRoot(registryValue(key, name))
-    if (root) out.push({ path: path.join(root, 'eNSP_Client.exe'), source: `${key}\\${name}` })
+    const value = cleanRoot(registryValue(key, name))
+    if (!value) continue
+    const exe = /\.exe$/i.test(value) ? value : path.join(value, 'eNSP_Client.exe')
+    out.push({ path: exe, source: `${key}\\${name}` })
   }
   for (const root of ENSP_ROOTS) out.push({ path: path.join(root, 'eNSP_Client.exe'), source: 'install root' })
   return out
@@ -95,13 +129,28 @@ export function vboxCandidates(override) {
   const out = []
   if (override) out.push({ path: override, source: 'override' })
   if (process.env.DSH_VBOX) out.push({ path: process.env.DSH_VBOX, source: 'DSH_VBOX' })
+  // Registry before PATH: VirtualBox always writes InstallDir, and a PATH entry
+  // can belong to a second or stale copy.
+  for (const [key, name] of VBOX_REGISTRY) {
+    const dir = cleanRoot(registryValue(key, name))
+    if (dir) out.push({ path: path.join(dir, 'VBoxManage.exe'), source: `${key}\\${name}` })
+  }
   if (isWindows) {
-    const r = spawnSync('where', ['VBoxManage.exe'], { encoding: 'utf8', windowsHide: true })
-    const first = (r.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0]
+    const first = firstOnPath('VBoxManage.exe')
     if (first) out.push({ path: first, source: 'PATH' })
   }
   for (const p of VBOX_PATHS) out.push({ path: p, source: 'install root' })
   return out
+}
+
+/** First hit from `where`, cached: it is a process spawn and PATH does not move. */
+const pathCache = new Map()
+function firstOnPath(program) {
+  if (pathCache.has(program)) return pathCache.get(program)
+  const r = spawnSync('where', [program], { encoding: 'utf8', windowsHide: true })
+  const first = (r.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0] ?? null
+  pathCache.set(program, first)
+  return first
 }
 
 /** First existing candidate, or null. */

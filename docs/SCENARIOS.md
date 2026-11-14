@@ -13,7 +13,7 @@ ensp up ospf-single.topo
 
 ## 基础
 
-### vlan-access — VLAN 与 Access 端口
+### vlan-access · VLAN 与 Access 端口
 
 - **英文名**：VLAN and access ports
 - **来源**：eNSP HCNA Lab 1-2
@@ -22,11 +22,11 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **创建 VLAN** — 按部门规划 VLAN ID，先创建再划端口
+1. **创建 VLAN**：按部门规划 VLAN ID，先创建再划端口
    - 验证：`display vlan`
-2. **端口改为 access** — 每个接入口设置 link-type access 并指定 PVID
+2. **端口改为 access**：每个接入口设置 link-type access 并指定 PVID
    - 验证：`display port vlan active`
-3. **验证隔离** — 同 VLAN PC 互通；跨 VLAN 应不通（无需路由）
+3. **验证隔离**：同 VLAN PC 互通；跨 VLAN 应不通（无需路由）
 
 **易错点**
 
@@ -45,7 +45,7 @@ ensp up ospf-single.topo
 - HCIA · 华为网络设备基本操作（手册第 9 页）
 - HCIA · VLAN 配置实验（手册第 21 页）
 
-### trunk-interconnect — Trunk 互联与多 VLAN 透传
+### trunk-interconnect · Trunk 互联与多 VLAN 透传
 
 - **英文名**：Trunk interconnect
 - **来源**：eNSP HCNA Lab 1-2 / 1-4
@@ -54,11 +54,11 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **两端建同名 VLAN** — VLAN 必须两端都存在，否则帧被丢弃
+1. **两端建同名 VLAN**：VLAN 必须两端都存在，否则帧被丢弃
    - 验证：`display vlan`
-2. **互联口设 trunk** — 放行所需 VLAN；PVID 保持默认 1
+2. **互联口设 trunk**：放行所需 VLAN；PVID 保持默认 1
    - 验证：`display port vlan active`
-3. **接入口设 access** — 按 VLAN 划分
+3. **接入口设 access**：按 VLAN 划分
 
 **易错点**
 
@@ -77,7 +77,7 @@ ensp up ospf-single.topo
 - HCIA · 华为网络设备基本操作（手册第 9 页）
 - HCIA · VLAN 配置实验（手册第 21 页）
 
-### vlanif-routing — VLAN 间路由（三层交换机）
+### vlanif-routing · VLAN 间路由（三层交换机）
 
 - **英文名**：Inter-VLAN routing with a layer-3 switch
 - **来源**：eNSP HCNA Lab 1-4 / 1-5
@@ -86,10 +86,10 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **建 VLAN 与 access 端口** — 先二层通，再上三层
-2. **创建 Vlanif 并配地址** — 一个 VLAN 一个 Vlanif，地址即该网段网关
+1. **建 VLAN 与 access 端口**：先二层通，再上三层
+2. **创建 Vlanif 并配地址**：一个 VLAN 一个 Vlanif，地址即该网段网关
    - 验证：`display ip interface brief`
-3. **验证** — 不同 VLAN 的 PC 互 ping，网关应可达
+3. **验证**：不同 VLAN 的 PC 互 ping，网关应可达
 
 **易错点**
 
@@ -109,6 +109,7 @@ ensp up ospf-single.topo
 | SW2 | Vlanif200 | 10.0.12.2/24 | 互联 VLAN200 |
 
 生成：`ensp preset vlanif-routing --topo vlanif-routing.topo`
+地址配置：`ensp preset vlanif-routing --config [目录]`
 - 验收：`ensp verify vlanif-routing --topology vlanif-routing.topo`（2 条断言）
 
 **教材章节**
@@ -116,7 +117,7 @@ ensp up ospf-single.topo
 - HCIA · 直连路由实验（手册第 65 页）
 - HCIA · 园区网络综合实验（手册第 220 页）
 
-### stp-rstp — STP / RSTP 生成树
+### stp-rstp · STP / RSTP 生成树
 
 - **英文名**：STP and RSTP
 - **来源**：eNSP HCNA Lab 3-1 / 3-2
@@ -125,12 +126,12 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **选根桥** — 核心设最低优先级，其余保持默认
+1. **选根桥**：核心设最低优先级，其余保持默认
    - 验证：`display stp`
-2. **选择模式** — RSTP 收敛更快；MSTP 用于多实例场景
-3. **观察端口角色** — 根端口 / 指定端口 / 阻塞端口
+2. **选择模式**：RSTP 收敛更快；MSTP 用于多实例场景
+3. **观察端口角色**：根端口 / 指定端口 / 阻塞端口
    - 验证：`display stp brief`
-4. **断链验证** — 断一条链路，阻塞口应在数秒内转为转发
+4. **断链验证**：断一条链路，阻塞口应在数秒内转为转发
 
 **易错点**
 
@@ -149,13 +150,14 @@ ensp up ospf-single.topo
 | SW3 | Vlanif10 | 192.168.10.253/24 | 管理地址 |
 
 生成：`ensp preset stp-rstp --topo stp-rstp.topo`
+地址配置：`ensp preset stp-rstp --config [目录]`
 - 验收：`ensp verify stp-rstp --topology stp-rstp.topo`（2 条断言）
 
 **教材章节**
 - HCIA · 生成树配置实验（手册第 41 页）
 - HCIP · RSTP 与MSTP 实验（手册第 167 页）
 
-### link-aggregation — 链路聚合 Eth-Trunk
+### link-aggregation · 链路聚合 Eth-Trunk
 
 - **英文名**：Link aggregation
 - **来源**：eNSP 常规实验
@@ -164,11 +166,11 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **建 Eth-Trunk** — 选 LACP 静态模式，两端必须一致
+1. **建 Eth-Trunk**：选 LACP 静态模式，两端必须一致
    - 验证：`display eth-trunk`
-2. **加入成员口** — 成员口不能单独配 IP 或 VLAN
+2. **加入成员口**：成员口不能单独配 IP 或 VLAN
    - 验证：`display eth-trunk 1`
-3. **在聚合口上配业务** — trunk / access 都配在 Eth-Trunk 上，不配在成员口
+3. **在聚合口上配业务**：trunk / access 都配在 Eth-Trunk 上，不配在成员口
 
 **易错点**
 
@@ -186,7 +188,7 @@ ensp up ospf-single.topo
 **教材章节**
 - HCIA · 以太网链路聚合实验（手册第 54 页）
 
-### port-security — 端口安全与 MAC 限制
+### port-security · 端口安全与 MAC 限制
 
 - **英文名**：Port security and MAC limits
 - **来源**：eNSP 常规实验
@@ -195,11 +197,11 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **开启端口安全** — 接口下 port-security enable，默认只允许 1 个 MAC
+1. **开启端口安全**：接口下 port-security enable，默认只允许 1 个 MAC
    - 验证：`display port-security`
-2. **选择学习方式** — sticky 粘滞学习自动转成静态表项；或手工 mac-address static 绑定
-3. **设违规动作** — protect 只丢包、restrict 丢包并告警、shutdown 直接关闭端口
-4. **验证** — 换一台 PC 接入，观察丢包/告警/端口 down 是否符合预期
+2. **选择学习方式**：sticky 粘滞学习自动转成静态表项；或手工 mac-address static 绑定
+3. **设违规动作**：protect 只丢包、restrict 丢包并告警、shutdown 直接关闭端口
+4. **验证**：换一台 PC 接入，观察丢包/告警/端口 down 是否符合预期
 
 **易错点**
 
@@ -219,7 +221,7 @@ ensp up ospf-single.topo
 - HCIP · 网络准入控制实验（手册第 11 页）
 - HCIP · 以太网交换安全实验（手册第 91 页）
 
-### port-isolation — 端口隔离与 MUX VLAN
+### port-isolation · 端口隔离与 MUX VLAN
 
 - **英文名**：Port isolation and MUX VLAN
 - **来源**：eNSP 常规实验
@@ -228,11 +230,11 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **配端口隔离组** — 接入端口加入 port-isolate group，同组之间二层不通
+1. **配端口隔离组**：接入端口加入 port-isolate group，同组之间二层不通
    - 验证：`display port-isolate group`
-2. **上行口与服务器口不入组** — 隔离只作用于同组端口，未入组的口仍可双向访问
-3. **需要跨设备隔离时用 MUX VLAN** — principal VLAN 对接上行，separate VLAN 完全隔离，group VLAN 内互通
-4. **验证** — 同组 PC 互 ping 不通，各自都能 ping 网关
+2. **上行口与服务器口不入组**：隔离只作用于同组端口，未入组的口仍可双向访问
+3. **需要跨设备隔离时用 MUX VLAN**：principal VLAN 对接上行，separate VLAN 完全隔离，group VLAN 内互通
+4. **验证**：同组 PC 互 ping 不通，各自都能 ping 网关
 
 **易错点**
 
@@ -246,12 +248,12 @@ ensp up ospf-single.topo
 - 链路：3 条
 
 生成：`ensp preset port-isolation --topo port-isolation.topo`
-- 验收：`ensp verify port-isolation --topology port-isolation.topo`（无专门断言，逐条跑本场景的验证命令）
+- 验收：`ensp verify port-isolation --topology port-isolation.topo`（1 条断言）
 
 **教材章节**
 - HCIP · VLAN 高级技术实验（手册第 79 页）
 
-### super-vlan — VLAN 聚合（Super-VLAN）
+### super-vlan · VLAN 聚合（Super-VLAN）
 
 - **英文名**：Super-VLAN and sub-VLANs
 - **来源**：eNSP 常规实验
@@ -260,11 +262,11 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **建子 VLAN** — 子 VLAN 只作二层划分，不建 Vlanif
-2. **建 Super-VLAN 并关联子 VLAN** — aggregate-vlan 指定主 VLAN，access-vlan 列出子 VLAN
+1. **建子 VLAN**：子 VLAN 只作二层划分，不建 Vlanif
+2. **建 Super-VLAN 并关联子 VLAN**：aggregate-vlan 指定主 VLAN，access-vlan 列出子 VLAN
    - 验证：`display vlan`
-3. **只在 Super-VLAN 上建 Vlanif** — 该地址同时是所有子 VLAN 的网关
-4. **验证** — 不同子 VLAN 的主机同网段，可直接互通
+3. **只在 Super-VLAN 上建 Vlanif**：该地址同时是所有子 VLAN 的网关
+4. **验证**：不同子 VLAN 的主机同网段，可直接互通
 
 **易错点**
 
@@ -284,13 +286,14 @@ ensp up ospf-single.topo
 | SW1 | Vlanif30 | 192.168.30.254/24 | sub-VLAN 30 |
 
 生成：`ensp preset super-vlan --topo super-vlan.topo`
+地址配置：`ensp preset super-vlan --config [目录]`
 - 验收：`ensp verify super-vlan --topology super-vlan.topo`（1 条断言）
 
 **教材章节**
 - HCIA · VLAN 配置实验（手册第 21 页）
 - HCIP · VLAN 高级技术实验（手册第 79 页）
 
-### static-route — 静态路由与默认路由
+### static-route · 静态路由与默认路由
 
 - **英文名**：Static and default routes
 - **来源**：eNSP HCNA Lab 4-1
@@ -299,12 +302,12 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **配接口地址** — 先保证直连可达
+1. **配接口地址**：先保证直连可达
    - 验证：`display ip interface brief`
-2. **写明细静态路由** — 目的网段 + 掩码 + 下一跳
+2. **写明细静态路由**：目的网段 + 掩码 + 下一跳
    - 验证：`display ip routing-table`
-3. **边缘用默认路由** — 0.0.0.0/0 指向出口，避免逐条写明细
-4. **备份用浮动静态** — 同一目的写两条，备路由 preference 调高
+3. **边缘用默认路由**：0.0.0.0/0 指向出口，避免逐条写明细
+4. **备份用浮动静态**：同一目的写两条，备路由 preference 调高
    - 验证：`display ip routing-table protocol static`
 
 **易错点**
@@ -325,13 +328,14 @@ ensp up ospf-single.topo
 | R2 | GigabitEthernet0/0/1 | 192.168.2.254/24 | PC2 网关 |
 
 生成：`ensp preset static-route --topo static-route.topo`
+地址配置：`ensp preset static-route --config [目录]`
 - 验收：`ensp verify static-route --topology static-route.topo`（1 条断言）
 
 **教材章节**
 - HCIA · 静态路由实验（手册第 72 页）
 - HCIA · 园区网络综合实验（手册第 220 页）
 
-### rip — RIPv1 / RIPv2
+### rip · RIPv1 / RIPv2
 
 - **英文名**：RIP versions 1 and 2
 - **来源**：eNSP HCNA Lab 4-2 / 4-3
@@ -340,10 +344,10 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **启动 RIP 进程** — 指定版本；v2 支持子网与认证
+1. **启动 RIP 进程**：指定版本；v2 支持子网与认证
    - 验证：`display rip`
-2. **network 宣告** — v1 按主类宣告，v2 可带掩码；宣告的是直连网段
-3. **可选：认证与聚合** — v2 支持明文/MD5 认证和手动聚合
+2. **network 宣告**：v1 按主类宣告，v2 可带掩码；宣告的是直连网段
+3. **可选：认证与聚合**：v2 支持明文/MD5 认证和手动聚合
    - 验证：`display rip route`
 
 **易错点**
@@ -366,9 +370,10 @@ ensp up ospf-single.topo
 | R3 | GigabitEthernet0/0/1 | 192.168.3.254/24 | PC2 网关 |
 
 生成：`ensp preset rip --topo rip.topo`
+地址配置：`ensp preset rip --config [目录]`
 - 验收：`ensp verify rip --topology rip.topo`（2 条断言）
 
-### ospf-single — OSPF 单区域
+### ospf-single · OSPF 单区域
 
 - **英文名**：OSPF single area
 - **来源**：eNSP HCNA Lab 4-4
@@ -377,12 +382,12 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **建 OSPF 进程** — 指定 router-id，建议显式配置避免选举不确定
+1. **建 OSPF 进程**：指定 router-id，建议显式配置避免选举不确定
    - 验证：`display ospf peer`
-2. **area 0 内 network** — 宣告直连网段；通配符是反掩码
-3. **调整 cost 或带宽** — 影响选路；默认按接口带宽计算
+2. **area 0 内 network**：宣告直连网段；通配符是反掩码
+3. **调整 cost 或带宽**：影响选路；默认按接口带宽计算
    - 验证：`display ospf interface`
-4. **验证** — 邻居 FULL、路由表出现远端网段
+4. **验证**：邻居 FULL、路由表出现远端网段
    - 验证：`display ip routing-table protocol ospf`
 
 **易错点**
@@ -408,13 +413,14 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 3.3.3.3/32 |  |
 
 生成：`ensp preset ospf-single --topo ospf-single.topo`
+地址配置：`ensp preset ospf-single --config [目录]`
 - 验收：`ensp verify ospf-single --topology ospf-single.topo`（2 条断言）
 
 **教材章节**
 - HCIA · OSPF 配置实验（手册第 101 页）
 - HCIP · OSPF 基础实验（手册第 7 页）
 
-### dhcp — DHCP 服务（含中继）
+### dhcp · DHCP 服务（含中继）
 
 - **英文名**：DHCP server and relay
 - **来源**：eNSP HCNA Lab 5-2
@@ -423,11 +429,11 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **启用 DHCP** — 全局 dhcp enable 必须先做
+1. **启用 DHCP**：全局 dhcp enable 必须先做
    - 验证：`display dhcp server statistics`
-2. **建地址池** — network、gateway-list、dns-list
+2. **建地址池**：network、gateway-list、dns-list
    - 验证：`display ip pool`
-3. **接口绑定** — 本网段用 dhcp select global/interface；跨网段加 dhcp relay
+3. **接口绑定**：本网段用 dhcp select global/interface；跨网段加 dhcp relay
    - 验证：`display dhcp relay`
 
 **易错点**
@@ -446,13 +452,14 @@ ensp up ospf-single.topo
 | R1 | LoopBack0 | 1.1.1.1/32 | router-id |
 
 生成：`ensp preset dhcp --topo dhcp.topo`
+地址配置：`ensp preset dhcp --config [目录]`
 - 验收：`ensp verify dhcp --topology dhcp.topo`（1 条断言）
 
 **教材章节**
 - HCIA · IP 地址自动配置实验（手册第 88 页）
 - HCIP · DHCP 实验（手册第 230 页）
 
-### acl-filter — ACL 访问控制
+### acl-filter · ACL 访问控制
 
 - **英文名**：ACL filtering
 - **来源**：eNSP HCNA Lab 3-1
@@ -461,10 +468,10 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **选 ACL 类型** — 基本(2000-2999)只看源；高级(3000-3999)看五元组
-2. **写规则并注意顺序** — 精确匹配在前、宽泛规则在后；默认末尾隐含拒绝
+1. **选 ACL 类型**：基本(2000-2999)只看源；高级(3000-3999)看五元组
+2. **写规则并注意顺序**：精确匹配在前、宽泛规则在后；默认末尾隐含拒绝
    - 验证：`display acl 3000`
-3. **应用到接口方向** — inbound 是进入接口的流量；方向选反等于不生效
+3. **应用到接口方向**：inbound 是进入接口的流量；方向选反等于不生效
    - 验证：`display traffic-filter applied-record`
 
 **易错点**
@@ -483,13 +490,14 @@ ensp up ospf-single.topo
 | R1 | GigabitEthernet0/0/0 | 192.168.20.253/24 | 同接口从地址 |
 
 生成：`ensp preset acl-filter --topo acl-filter.topo`
+地址配置：`ensp preset acl-filter --config [目录]`
 - 验收：`ensp verify acl-filter --topology acl-filter.topo`（1 条断言）
 
 **教材章节**
 - HCIA · ACL 配置实验（手册第 129 页）
 - HCIA · NAT 配置实验（手册第 156 页）
 
-### aaa-local — 本地 AAA 与设备登录
+### aaa-local · 本地 AAA 与设备登录
 
 - **英文名**：Local AAA and device login
 - **来源**：eNSP HCNA Lab 3-3
@@ -498,11 +506,11 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **建本地用户** — 设置 privilege 与 service-type
+1. **建本地用户**：设置 privilege 与 service-type
    - 验证：`display aaa local-user`
-2. **VTY 用 aaa 认证** — authentication-mode aaa + protocol inbound ssh
+2. **VTY 用 aaa 认证**：authentication-mode aaa + protocol inbound ssh
    - 验证：`display user-interface 0`
-3. **VTY 限源 ACL** — 只允许管理网段登录
+3. **VTY 限源 ACL**：只允许管理网段登录
    - 验证：`display current-configuration | include acl`
 
 **易错点**
@@ -520,6 +528,7 @@ ensp up ospf-single.topo
 | R1 | GigabitEthernet0/0/1 | 192.168.1.254/24 | 管理网段 |
 
 生成：`ensp preset aaa-local --topo aaa-local.topo`
+地址配置：`ensp preset aaa-local --config [目录]`
 - 验收：`ensp verify aaa-local --topology aaa-local.topo`（1 条断言）
 
 **教材章节**
@@ -527,7 +536,7 @@ ensp up ospf-single.topo
 - HCIA · 远程登录实验（手册第 144 页）
 - HCIP · 网络准入控制实验（手册第 11 页）
 
-### vrrp-basics — VRRP 网关冗余
+### vrrp-basics · VRRP 网关冗余
 
 - **英文名**：VRRP gateway redundancy
 - **来源**：eNSP 常规实验
@@ -536,14 +545,14 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **两台设备同网段同 Vlanif** — 虚拟网关地址在同一个二层域内才有效
+1. **两台设备同网段同 Vlanif**：虚拟网关地址在同一个二层域内才有效
    - 验证：`display ip interface brief`
-2. **建 VRRP 组** — 两端 vrid 必须一致；虚拟 IP 不能与任何真实接口地址冲突
+2. **建 VRRP 组**：两端 vrid 必须一致；虚拟 IP 不能与任何真实接口地址冲突
    - 验证：`display vrrp`
-3. **定主备** — 优先级大者为主（默认 100，最大 254）；地址拥有者优先级 255
-4. **加认证** — 两端 authentication-mode 与密钥必须一致，否则报文被丢弃、双主
+3. **定主备**：优先级大者为主（默认 100，最大 254）；地址拥有者优先级 255
+4. **加认证**：两端 authentication-mode 与密钥必须一致，否则报文被丢弃、双主
    - 验证：`display vrrp verbose`
-5. **加 track 上行** — track interface 上行口，主设备上行断则主动降优先级让备接管
+5. **加 track 上行**：track interface 上行口，主设备上行断则主动降优先级让备接管
    - 验证：`display vrrp`
 
 **易错点**
@@ -566,13 +575,14 @@ ensp up ospf-single.topo
 | SW2 | Vlanif100 | 10.0.100.2/24 | 上行互联 |
 
 生成：`ensp preset vrrp-basics --topo vrrp-basics.topo`
+地址配置：`ensp preset vrrp-basics --config [目录]`
 - 验收：`ensp verify vrrp-basics --topology vrrp-basics.topo`（2 条断言）
 
 **教材章节**
 - HCIP · RSTP 与MSTP 实验（手册第 167 页）
 - HCIP · VRRP 实验（手册第 219 页）
 
-### network-management — 网络管理（SNMP / NTP / Syslog）
+### network-management · 网络管理（SNMP / NTP / Syslog）
 
 - **英文名**：Network management with SNMP, NTP and syslog
 - **来源**：eNSP 常规实验
@@ -581,13 +591,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **SNMP** — snmp-agent 开团本，配 v2c community 或 v3 用户，ACL 限源
+1. **SNMP**：snmp-agent 开团本，配 v2c community 或 v3 用户，ACL 限源
    - 验证：`display snmp-agent sys-info`
-2. **NTP** — 客户端 ntp-service unicast-server 指向时钟源；层级用 stratum 区分
+2. **NTP**：客户端 ntp-service unicast-server 指向时钟源；层级用 stratum 区分
    - 验证：`display ntp status`
-3. **Syslog** — info-center loghost 指定日志服务器，别把 info-center 整体关掉
+3. **Syslog**：info-center loghost 指定日志服务器，别把 info-center 整体关掉
    - 验证：`display info-center`
-4. **验证** — 网管能取到接口流量；设备时间与服务器一致；服务器收到日志
+4. **验证**：网管能取到接口流量；设备时间与服务器一致；服务器收到日志
 
 **易错点**
 
@@ -608,6 +618,7 @@ ensp up ospf-single.topo
 | SW1 | Vlanif30 | 10.1.30.2/24 | 设备管理地址 |
 
 生成：`ensp preset network-management --topo network-management.topo`
+地址配置：`ensp preset network-management --config [目录]`
 - 验收：`ensp verify network-management --topology network-management.topo`（1 条断言）
 
 **教材章节**
@@ -619,7 +630,7 @@ ensp up ospf-single.topo
 
 ## 进阶
 
-### mstp-load-balance — MSTP 多实例负载分担
+### mstp-load-balance · MSTP 多实例负载分担
 
 - **英文名**：MSTP multi-instance load sharing
 - **来源**：eNSP HCNA Lab 3-2 延伸
@@ -628,11 +639,11 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **统一域参数** — 域名、修订级别、实例-VLAN 映射必须全网一致
+1. **统一域参数**：域名、修订级别、实例-VLAN 映射必须全网一致
    - 验证：`display stp region-configuration`
-2. **分实例设优先级** — 实例 1 核心 A 为根、实例 2 核心 B 为根
+2. **分实例设优先级**：实例 1 核心 A 为根、实例 2 核心 B 为根
    - 验证：`display stp instance 1 brief`
-3. **实例 0 显式指定** — 未映射 VLAN 落在 CIST，同样要指定根桥
+3. **实例 0 显式指定**：未映射 VLAN 落在 CIST，同样要指定根桥
    - 验证：`display stp instance 0 brief`
 
 **易错点**
@@ -653,13 +664,14 @@ ensp up ospf-single.topo
 | CORE2 | Vlanif20 | 192.168.20.252/24 | VLAN20 网关（实例2 主） |
 
 生成：`ensp preset mstp-load-balance --topo mstp-load-balance.topo`
-- 验收：`ensp verify mstp-load-balance --topology mstp-load-balance.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset mstp-load-balance --config [目录]`
+- 验收：`ensp verify mstp-load-balance --topology mstp-load-balance.topo`（3 条断言）
 
 **教材章节**
 - HCIA · 生成树配置实验（手册第 41 页）
 - HCIP · RSTP 与MSTP 实验（手册第 167 页）
 
-### ospf-multi-area — OSPF 多区域与 ABR
+### ospf-multi-area · OSPF 多区域与 ABR
 
 - **英文名**：OSPF multi-area and ABR
 - **来源**：eNSP 2-2 Multi-Area OSPF
@@ -668,11 +680,11 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **划分区域** — 骨干 area 0 必须连续；非骨干挂在 ABR 上
+1. **划分区域**：骨干 area 0 必须连续；非骨干挂在 ABR 上
    - 验证：`display ospf brief`
-2. **ABR 汇总** — 在 ABR 上对区域间路由做 abr-summary
+2. **ABR 汇总**：在 ABR 上对区域间路由做 abr-summary
    - 验证：`display ospf abr-asbr`
-3. **验证区域间路由** — 其他区域应看到汇总路由而非明细
+3. **验证区域间路由**：其他区域应看到汇总路由而非明细
    - 验证：`display ip routing-table protocol ospf`
 
 **易错点**
@@ -696,12 +708,13 @@ ensp up ospf-single.topo
 | R4 | GigabitEthernet0/0/0 | 10.0.24.4/24 | area 2 |
 
 生成：`ensp preset ospf-multi-area --topo ospf-multi-area.topo`
+地址配置：`ensp preset ospf-multi-area --config [目录]`
 - 验收：`ensp verify ospf-multi-area --topology ospf-multi-area.topo`（2 条断言）
 
 **教材章节**
 - HCIP · OSPF 基础实验（手册第 7 页）
 
-### ospf-stub-nssa — OSPF 特殊区域（Stub / NSSA）
+### ospf-stub-nssa · OSPF 特殊区域（Stub / NSSA）
 
 - **英文名**：OSPF stub and NSSA
 - **来源**：eNSP 2-4 OSPF Stub Area and NSSA
@@ -710,10 +723,10 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **边缘区域设 stub** — 区域内所有路由器都要配 stub
+1. **边缘区域设 stub**：区域内所有路由器都要配 stub
    - 验证：`display ospf brief`
-2. **需要引入外部路由时改 NSSA** — NSSA 允许 ASBR 存在，通过 Type-7 转换
-3. **验证 LSA 类型** — stub 区域无 Type-5；NSSA 有 Type-7
+2. **需要引入外部路由时改 NSSA**：NSSA 允许 ASBR 存在，通过 Type-7 转换
+3. **验证 LSA 类型**：stub 区域无 Type-5；NSSA 有 Type-7
    - 验证：`display ospf lsdb`
 
 **易错点**
@@ -736,12 +749,13 @@ ensp up ospf-single.topo
 | R4 | GigabitEthernet0/0/0 | 10.0.14.4/24 | area 2 |
 
 生成：`ensp preset ospf-stub-nssa --topo ospf-stub-nssa.topo`
+地址配置：`ensp preset ospf-stub-nssa --config [目录]`
 - 验收：`ensp verify ospf-stub-nssa --topology ospf-stub-nssa.topo`（2 条断言）
 
 **教材章节**
 - HCIP · OSPF 基础实验（手册第 7 页）
 
-### ospf-lsa-types — OSPF LSA 类型与区域过滤
+### ospf-lsa-types · OSPF LSA 类型与区域过滤
 
 - **英文名**：OSPF LSA types and area filtering
 - **来源**：eNSP 2-3 OSPF Adjacency Relationships and Various Types of LSAs
@@ -750,15 +764,15 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **建立多区域拓扑** — 两台 ABR 各挂一个非骨干区域，其中一侧引入外部路由
+1. **建立多区域拓扑**：两台 ABR 各挂一个非骨干区域，其中一侧引入外部路由
    - 验证：`display ospf brief`
-2. **逐个区域看 LSDB** — 区域内看 Type-1/2；ABR 上额外有 Type-3；ASBR 所在区域有 Type-5
+2. **逐个区域看 LSDB**：区域内看 Type-1/2；ABR 上额外有 Type-3；ASBR 所在区域有 Type-5
    - 验证：`display ospf lsdb`
-3. **观察 ASBR 与外部路由** — Type-4 描述 ASBR 位置，由 ABR 产生；Type-5 携带外部网段
+3. **观察 ASBR 与外部路由**：Type-4 描述 ASBR 位置，由 ABR 产生；Type-5 携带外部网段
    - 验证：`display ospf lsdb ase`
-4. **NSSA 场景看 Type-7** — NSSA 内引入的外部路由先以 Type-7 存在，由 ABR 转换成 Type-5
+4. **NSSA 场景看 Type-7**：NSSA 内引入的外部路由先以 Type-7 存在，由 ABR 转换成 Type-5
    - 验证：`display ospf lsdb nssa`
-5. **在 ABR 上过滤 Type-3** — filter import/export 配合 ACL 或 ip-prefix，只影响区域间路由
+5. **在 ABR 上过滤 Type-3**：filter import/export 配合 ACL 或 ip-prefix，只影响区域间路由
    - 验证：`display ospf lsdb summary`
 
 **易错点**
@@ -787,12 +801,13 @@ ensp up ospf-single.topo
 | R4 | LoopBack0 | 4.4.4.4/32 | ASBR 外部路由 |
 
 生成：`ensp preset ospf-lsa-types --topo ospf-lsa-types.topo`
-- 验收：`ensp verify ospf-lsa-types --topology ospf-lsa-types.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset ospf-lsa-types --config [目录]`
+- 验收：`ensp verify ospf-lsa-types --topology ospf-lsa-types.topo`（2 条断言）
 
 **教材章节**
 - HCIP · OSPF 基础实验（手册第 7 页）
 
-### ospf-virtual-link — OSPF 虚连接
+### ospf-virtual-link · OSPF 虚连接
 
 - **英文名**：OSPF virtual link
 - **来源**：eNSP 2-5 OSPF VCs and Inter-Area Route Filtering
@@ -801,12 +816,12 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **确认割裂点** — 非骨干区域两侧都没有物理接口在 area 0 内
+1. **确认割裂点**：非骨干区域两侧都没有物理接口在 area 0 内
    - 验证：`display ospf brief`
-2. **两端 ABR 配 vlink-peer** — 指向对端 router-id，不是接口地址；两端都要配
+2. **两端 ABR 配 vlink-peer**：指向对端 router-id，不是接口地址；两端都要配
    - 验证：`display ospf vlink`
-3. **确认 transit 区域是普通区域** — 虚连接只能穿过普通区域，不能穿 stub 或 NSSA
-4. **验证区域间路由恢复** — 割裂侧应重新学到 Type-3 路由
+3. **确认 transit 区域是普通区域**：虚连接只能穿过普通区域，不能穿 stub 或 NSSA
+4. **验证区域间路由恢复**：割裂侧应重新学到 Type-3 路由
    - 验证：`display ip routing-table protocol ospf`
 
 **易错点**
@@ -830,12 +845,13 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 3.3.3.3/32 | 虚拟链路的两端 router-id |
 
 生成：`ensp preset ospf-virtual-link --topo ospf-virtual-link.topo`
-- 验收：`ensp verify ospf-virtual-link --topology ospf-virtual-link.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset ospf-virtual-link --config [目录]`
+- 验收：`ensp verify ospf-virtual-link --topology ospf-virtual-link.topo`（1 条断言）
 
 **教材章节**
 - HCIP · OSPF 基础实验（手册第 7 页）
 
-### ospf-troubleshooting — OSPF 邻居排障
+### ospf-troubleshooting · OSPF 邻居排障
 
 - **英文名**：OSPF neighbour troubleshooting
 - **来源**：eNSP 2-6 OSPF Troubleshooting / 本项目实测
@@ -844,15 +860,15 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **先读状态** — Down 无 Hello；Init 单向收到；2-Way 正常但不是 DR/BDR；ExStart 卡在 DD 交换
+1. **先读状态**：Down 无 Hello；Init 单向收到；2-Way 正常但不是 DR/BDR；ExStart 卡在 DD 交换
    - 验证：`display ospf peer`
-2. **查 Hello 参数** — 区域号、hello/dead 定时器、认证、网络类型、掩码（broadcast 下要求同掩码）必须一致
+2. **查 Hello 参数**：区域号、hello/dead 定时器、认证、网络类型、掩码（broadcast 下要求同掩码）必须一致
    - 验证：`display ospf interface`
-3. **查报文层错误** — MTU 不一致会让 DD 交换卡在 ExStart；ACL 挡 224.0.0.5/224.0.0.6 会让邻居根本起不来
+3. **查报文层错误**：MTU 不一致会让 DD 交换卡在 ExStart；ACL 挡 224.0.0.5/224.0.0.6 会让邻居根本起不来
    - 验证：`display ospf error`
-4. **确认接口 MTU** — 两侧 MTU 必须相等；也可用 ospf mtu-enable 让 DD 携带 MTU 并显式报错
+4. **确认接口 MTU**：两侧 MTU 必须相等；也可用 ospf mtu-enable 让 DD 携带 MTU 并显式报错
    - 验证：`display interface GigabitEthernet0/0/0 | include MTU`
-5. **确认直连可达** — ping 对端接口地址通不通，不通则先解决二层或地址问题
+5. **确认直连可达**：ping 对端接口地址通不通，不通则先解决二层或地址问题
 
 **易错点**
 
@@ -876,14 +892,15 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 2.2.2.2/32 |  |
 
 生成：`ensp preset ospf-troubleshooting --topo ospf-troubleshooting.topo`
-- 验收：`ensp verify ospf-troubleshooting --topology ospf-troubleshooting.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset ospf-troubleshooting --config [目录]`
+- 验收：`ensp verify ospf-troubleshooting --topology ospf-troubleshooting.topo`（2 条断言）
 
 **教材章节**
 - HCIA · 网络故障排除实验（手册第 188 页）
 - HCIP · IGP 高级特性实验（手册第 6 页）
 - HCIE · IPv4 路由技术（手册第 10 页）
 
-### nat — NAT（源 NAT / NAT Server）
+### nat · NAT（源 NAT / NAT Server）
 
 - **英文名**：NAT source and server
 - **来源**：eNSP HCNA Lab 3-2
@@ -892,12 +909,12 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **写 ACL 匹配内网源** — permit 需要转换的源网段
+1. **写 ACL 匹配内网源**：permit 需要转换的源网段
    - 验证：`display acl`
-2. **出口配 nat outbound** — 绑定 ACL；easy-ip 用接口地址
+2. **出口配 nat outbound**：绑定 ACL；easy-ip 用接口地址
    - 验证：`display nat session all`
-3. **发布服务器用 nat server** — 公网地址端口 -> 内网地址端口
-4. **验证回程** — NAT 后需保证回程路由指向出口
+3. **发布服务器用 nat server**：公网地址端口 -> 内网地址端口
+4. **验证回程**：NAT 后需保证回程路由指向出口
 
 **易错点**
 
@@ -917,6 +934,7 @@ ensp up ospf-single.topo
 | ISP | LoopBack0 | 8.8.8.8/32 | 模拟 Internet 目的地址 |
 
 生成：`ensp preset nat --topo nat.topo`
+地址配置：`ensp preset nat --config [目录]`
 - 验收：`ensp verify nat --topology nat.topo`（1 条断言）
 
 **教材章节**
@@ -924,7 +942,7 @@ ensp up ospf-single.topo
 - HCIA · NAT 配置实验（手册第 156 页）
 - HCIP · 防火墙技术实验（手册第 208 页）
 
-### ppp-hdlc — HDLC 与 PPP（含 PPPoE）
+### ppp-hdlc · HDLC 与 PPP（含 PPPoE）
 
 - **英文名**：HDLC and PPP
 - **来源**：eNSP HCNA Lab 2-1 / 2-3
@@ -933,34 +951,36 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **设封装类型** — HDLC 为默认；PPP 支持认证与多链路
-   - 验证：`display interface Serial`
-2. **配置认证** — 一端 authenticator，另一端 pap/chap 用户名密码
-   - 验证：`display ppp interface`
-3. **PPPoE** — 服务端建 VT 与地址池，客户端 dialer 拨号
-   - 验证：`display pppoe-client session summary`
+1. **设封装类型**：串口默认是 PPP，HDLC 要显式切换；PPP 支持认证与多链路
+   - 验证：`display interface Serial0/0/1`
+2. **配置认证**：一端 authenticator，另一端 pap/chap 用户名密码
+   - 验证：`display current-configuration interface Serial0/0/0`
+3. **PPPoE**：服务端建 VT 与地址池，客户端 dialer 拨号
+   - 验证：`display ip pool`
 
 **易错点**
 
+- 串口上默认封装是 PPP，不是 HDLC，`display interface` 里的 Link layer protocol 会直接说明当前是哪种
 - PPP 认证两端 pap/chap 不一致会反复协商失败
-- 串口需先确认物理 up 且时钟配置正确
+- PPPoE 服务端要在物理口上 `pppoe-server bind virtual-template`，地址池挂在 VT 上
 
 **拓扑蓝图**
 
-- 设备：R1 (AR2220)、R2 (AR2220)
+- 设备：R1 (Router)、R2 (Router)
 - 链路：2 条
 
 | 设备 | 接口 | 地址 | 说明 |
 | --- | --- | --- | --- |
-| R1 | GigabitEthernet0/0/0 | 10.0.12.1/30 | link-protocol ppp + CHAP |
-| R2 | GigabitEthernet0/0/0 | 10.0.12.2/30 |  |
-| R1 | GigabitEthernet0/0/1 | 10.0.13.1/30 | link-protocol hdlc 对照 |
-| R2 | GigabitEthernet0/0/1 | 10.0.13.2/30 |  |
+| R1 | Serial0/0/0 | 10.0.12.1/30 | link-protocol ppp + CHAP |
+| R2 | Serial0/0/0 | 10.0.12.2/30 |  |
+| R1 | Serial0/0/1 | 10.0.13.1/30 | link-protocol hdlc 对照 |
+| R2 | Serial0/0/1 | 10.0.13.2/30 |  |
 
 生成：`ensp preset ppp-hdlc --topo ppp-hdlc.topo`
-- 验收：`ensp verify ppp-hdlc --topology ppp-hdlc.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset ppp-hdlc --config [目录]`
+- 验收：`ensp verify ppp-hdlc --topology ppp-hdlc.topo`（2 条断言）
 
-### ipv6 — IPv6 基础与路由
+### ipv6 · IPv6 基础与路由
 
 - **英文名**：IPv6 basics and routing
 - **来源**：eNSP HCNA Lab 5-1
@@ -969,10 +989,10 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **全局启用 IPv6** — 接口下也要 ipv6 enable
+1. **全局启用 IPv6**：接口下也要 ipv6 enable
    - 验证：`display ipv6 interface brief`
-2. **配地址** — 可用链路本地 + 全球单播，或 address auto link-local
-3. **路由** — 静态 ipv6 route 或 ospfv3
+2. **配地址**：可用链路本地 + 全球单播，或 address auto link-local
+3. **路由**：静态 ipv6 route 或 ospfv3
    - 验证：`display ipv6 routing-table`
 
 **易错点**
@@ -993,6 +1013,7 @@ ensp up ospf-single.topo
 | R2 | LoopBack0 | 2001:db8:2::2/128 |  |
 
 生成：`ensp preset ipv6 --topo ipv6.topo`
+地址配置：`ensp preset ipv6 --config [目录]`
 - 验收：`ensp verify ipv6 --topology ipv6.topo`（2 条断言）
 
 **教材章节**
@@ -1001,7 +1022,7 @@ ensp up ospf-single.topo
 - HCIE · IPv6 路由技术（手册第 91 页）
 - HCIE · SRv6 实验（手册第 399 页）
 
-### dhcp-snooping — DHCP Snooping 与 IPSG
+### dhcp-snooping · DHCP Snooping 与 IPSG
 
 - **英文名**：DHCP snooping and IPSG
 - **来源**：eNSP 常规实验
@@ -1010,13 +1031,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **全局开 DHCP Snooping** — dhcp snooping enable，再按 VLAN 开 dhcp snooping enable
+1. **全局开 DHCP Snooping**：dhcp snooping enable，再按 VLAN 开 dhcp snooping enable
    - 验证：`display dhcp snooping`
-2. **上行口设 trusted** — 接合法 DHCP 服务器的口必须 dhcp snooping trusted，否则所有 DHCP 报文被丢
-3. **接入口保持 untrusted** — 用户口默认 untrusted，收到 DHCP Offer 直接丢弃
+2. **上行口设 trusted**：接合法 DHCP 服务器的口必须 dhcp snooping trusted，否则所有 DHCP 报文被丢
+3. **接入口保持 untrusted**：用户口默认 untrusted，收到 DHCP Offer 直接丢弃
    - 验证：`display dhcp snooping user-info`
-4. **开 IPSG** — ip source check user-bind enable，基于 snooping 表项校验源 IP+MAC
-5. **验证** — 私接 DHCP 服务器后 PC 拿不到错误地址；手工改 IP 后无法上网
+4. **开 IPSG**：ip source check user-bind enable，基于 snooping 表项校验源 IP+MAC
+5. **验证**：私接 DHCP 服务器后 PC 拿不到错误地址；手工改 IP 后无法上网
 
 **易错点**
 
@@ -1035,6 +1056,7 @@ ensp up ospf-single.topo
 | SW1 | Vlanif10 | 192.168.10.253/24 | 管理地址 |
 
 生成：`ensp preset dhcp-snooping --topo dhcp-snooping.topo`
+地址配置：`ensp preset dhcp-snooping --config [目录]`
 - 验收：`ensp verify dhcp-snooping --topology dhcp-snooping.topo`（1 条断言）
 
 **教材章节**
@@ -1043,7 +1065,7 @@ ensp up ospf-single.topo
 - HCIP · 以太网交换安全实验（手册第 91 页）
 - HCIP · DHCP 实验（手册第 230 页）
 
-### arp-security — ARP 安全（防欺骗与防攻击）
+### arp-security · ARP 安全（防欺骗与防攻击）
 
 - **英文名**：ARP security
 - **来源**：eNSP 常规实验
@@ -1052,13 +1074,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **静态绑定网关** — 用户侧手工 arp static 或交换机侧 arp static，锁定网关 MAC
+1. **静态绑定网关**：用户侧手工 arp static 或交换机侧 arp static，锁定网关 MAC
    - 验证：`display arp`
-2. **开 ARP 检测** — arp anti-attack check user-bind enable，丢弃 MAC/IP 不匹配的 ARP
+2. **开 ARP 检测**：arp anti-attack check user-bind enable，丢弃 MAC/IP 不匹配的 ARP
    - 验证：`display arp anti-attack`
-3. **限速防泛洪** — arp anti-attack rate-limit 限制单位时间 ARP 报文数
-4. **DAI 类方案** — 基于 DHCP Snooping 表项的动态 ARP 检测，比纯静态更适合终端多的场景
-5. **验证** — 在攻击机上伪造网关 MAC 发 ARP，受害机 ARP 表不应被改写
+3. **限速防泛洪**：arp anti-attack rate-limit 限制单位时间 ARP 报文数
+4. **DAI 类方案**：基于 DHCP Snooping 表项的动态 ARP 检测，比纯静态更适合终端多的场景
+5. **验证**：在攻击机上伪造网关 MAC 发 ARP，受害机 ARP 表不应被改写
 
 **易错点**
 
@@ -1076,12 +1098,13 @@ ensp up ospf-single.topo
 | SW1 | Vlanif10 | 192.168.10.254/24 | 网关兼 DHCP Snooping 设备 |
 
 生成：`ensp preset arp-security --topo arp-security.topo`
-- 验收：`ensp verify arp-security --topology arp-security.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset arp-security --config [目录]`
+- 验收：`ensp verify arp-security --topology arp-security.topo`（1 条断言）
 
 **教材章节**
 - HCIP · 以太网交换安全实验（手册第 91 页）
 
-### qos-basics — QoS 分类标记与队列
+### qos-basics · QoS 分类标记与队列
 
 - **英文名**：QoS classification, marking and queues
 - **来源**：eNSP 常规实验
@@ -1090,13 +1113,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **分类** — traffic classifier 匹配 ACL 或 VLAN，指定 operator or/and
+1. **分类**：traffic classifier 匹配 ACL 或 VLAN，指定 operator or/and
    - 验证：`display traffic classifier`
-2. **标记** — traffic behavior 里 remark dscp 或 remark 8021p；标记要尽量靠近源端
-3. **队列调度** — 接口下 qos schedule 或 diffserv domain，给高优先级队列加权
-4. **限速与整形** — car 做入向限速，traffic shaping 做出向整形
+2. **标记**：traffic behavior 里 remark dscp 或 remark 8021p；标记要尽量靠近源端
+3. **队列调度**：接口下 qos schedule 或 diffserv domain，给高优先级队列加权
+4. **限速与整形**：car 做入向限速，traffic shaping 做出向整形
    - 验证：`display qos car`
-5. **绑定并验证** — traffic policy 绑到接口；打流观察高优先级丢包率
+5. **绑定并验证**：traffic policy 绑到接口；打流观察高优先级丢包率
    - 验证：`display traffic policy statistics`
 
 **易错点**
@@ -1118,9 +1141,10 @@ ensp up ospf-single.topo
 | R2 | GigabitEthernet0/0/0 | 10.0.12.2/24 |  |
 
 生成：`ensp preset qos-basics --topo qos-basics.topo`
+地址配置：`ensp preset qos-basics --config [目录]`
 - 验收：`ensp verify qos-basics --topology qos-basics.topo`（1 条断言）
 
-### wlan-basic — WLAN（AC + FIT AP）
+### wlan-basic · WLAN（AC + FIT AP）
 
 - **英文名**：WLAN with AC and FIT AP
 - **来源**：eNSP WLAN 实验
@@ -1129,10 +1153,10 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **AP 管理网段与 DHCP** — AP 需拿到地址并发现 AC（option 43 或同网段广播）
+1. **AP 管理网段与 DHCP**：AP 需拿到地址并发现 AC（option 43 或同网段广播）
    - 验证：`display ap all`
-2. **建安全/SSID/VAP 模板** — security-profile -> ssid-profile -> vap-profile
-3. **绑定到 AP 组** — vap-profile 绑定 wlan 与 radio
+2. **建安全/SSID/VAP 模板**：security-profile -> ssid-profile -> vap-profile
+3. **绑定到 AP 组**：vap-profile 绑定 wlan 与 radio
    - 验证：`display vap ssid`
 
 **易错点**
@@ -1152,13 +1176,14 @@ ensp up ospf-single.topo
 | SW1 | Vlanif100 | 192.168.100.254/24 | AP 管理网段 |
 
 生成：`ensp preset wlan-basic --topo wlan-basic.topo`
-- 验收：`ensp verify wlan-basic --topology wlan-basic.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset wlan-basic --config [目录]`
+- 验收：`ensp verify wlan-basic --topology wlan-basic.topo`（1 条断言）
 
 **教材章节**
 - HCIA · WAC+FIT AP 组网实验（手册第 164 页）
 - HCIP · WLAN 实验（手册第 242 页）
 
-### ospfv3-ipv6 — OSPFv3 与 IPv6 双栈
+### ospfv3-ipv6 · OSPFv3 与 IPv6 双栈
 
 - **英文名**：OSPFv3 and IPv6 dual stack
 - **来源**：eNSP HCNA Lab 5-1 延伸
@@ -1167,13 +1192,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **全局与接口双开 IPv6** — ipv6 全局开启，接口 ipv6 enable 并配地址
+1. **全局与接口双开 IPv6**：ipv6 全局开启，接口 ipv6 enable 并配地址
    - 验证：`display ipv6 interface brief`
-2. **建 OSPFv3 进程** — ospfv3 1 需指定 router-id（用 IPv4 地址形式），再在接口 ospfv3 1 area 0
+2. **建 OSPFv3 进程**：ospfv3 1 需指定 router-id（用 IPv4 地址形式），再在接口 ospfv3 1 area 0
    - 验证：`display ospfv3 peer`
-3. **观察链路本地地址** — OSPFv3 邻居用 fe80:: 建立，接口必须有链路本地地址
+3. **观察链路本地地址**：OSPFv3 邻居用 fe80:: 建立，接口必须有链路本地地址
    - 验证：`display ospfv3 interface`
-4. **验证路由** — IPv6 路由表出现对端网段，双栈下 IPv4 路由不受影响
+4. **验证路由**：IPv6 路由表出现对端网段，双栈下 IPv4 路由不受影响
    - 验证：`display ipv6 routing-table`
 
 **易错点**
@@ -1197,6 +1222,7 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 2001:db8:3::3/128 | router-id 用 IPv4 地址 |
 
 生成：`ensp preset ospfv3-ipv6 --topo ospfv3-ipv6.topo`
+地址配置：`ensp preset ospfv3-ipv6 --config [目录]`
 - 验收：`ensp verify ospfv3-ipv6 --topology ospfv3-ipv6.topo`（1 条断言）
 
 **教材章节**
@@ -1205,7 +1231,7 @@ ensp up ospf-single.topo
 - HCIE · IPv6 路由技术（手册第 91 页）
 - HCIE · SRv6 实验（手册第 399 页）
 
-### isis-multi-level — IS-IS 多级别与默认路由注入
+### isis-multi-level · IS-IS 多级别与默认路由注入
 
 - **英文名**：IS-IS levels and default-route injection
 - **来源**：本项目实测验证（见 docs/SCENARIOS.md）
@@ -1214,13 +1240,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **规划 NET 与级别** — 同一区域用相同区域 ID；边界路由器 level-1-2
+1. **规划 NET 与级别**：同一区域用相同区域 ID；边界路由器 level-1-2
    - 验证：`display isis brief`
-2. **配置 NET 并启用** — isis 进程下 network-entity，再在接口 isis enable
+2. **配置 NET 并启用**：isis 进程下 network-entity，再在接口 isis enable
    - 验证：`display isis interface`
-3. **注入默认路由** — L1 边缘路由器 default-route-advertise always level-1
+3. **注入默认路由**：L1 边缘路由器 default-route-advertise always level-1
    - 验证：`display ip routing-table`
-4. **验证级别隔离** — L2 侧不应看到 L1 区域内部的默认路由注入
+4. **验证级别隔离**：L2 侧不应看到 L1 区域内部的默认路由注入
    - 验证：`display isis peer`
 
 **易错点**
@@ -1247,6 +1273,7 @@ ensp up ospf-single.topo
 | R4 | LoopBack0 | 4.4.4.4/32 |  |
 
 生成：`ensp preset isis-multi-level --topo isis-multi-level.topo`
+地址配置：`ensp preset isis-multi-level --config [目录]`
 - 验收：`ensp verify isis-multi-level --topology isis-multi-level.topo`（2 条断言）
 
 **教材章节**
@@ -1257,7 +1284,7 @@ ensp up ospf-single.topo
 
 ## 高级
 
-### bgp-ebgp-ibgp — BGP EBGP / IBGP
+### bgp-ebgp-ibgp · BGP EBGP / IBGP
 
 - **英文名**：BGP peering
 - **来源**：eNSP 3-1/3-2/3-3
@@ -1266,12 +1293,12 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **建 BGP 进程与 AS 号** — AS 号决定 EBGP/IBGP 关系
+1. **建 BGP 进程与 AS 号**：AS 号决定 EBGP/IBGP 关系
    - 验证：`display bgp peer`
-2. **配置 peer** — IBGP 常用 loopback + update-source；EBGP 用直连口
+2. **配置 peer**：IBGP 常用 loopback + update-source；EBGP 用直连口
    - 验证：`display bgp peer verbose`
-3. **宣告网段** — network 只能宣告路由表中存在的精确网段
-4. **处理下一跳** — IBGP 需 next-hop-local，否则路由不可达
+3. **宣告网段**：network 只能宣告路由表中存在的精确网段
+4. **处理下一跳**：IBGP 需 next-hop-local，否则路由不可达
    - 验证：`display bgp routing-table`
 
 **易错点**
@@ -1294,12 +1321,13 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 3.3.3.3/32 | AS 200 业务网段 |
 
 生成：`ensp preset bgp-ebgp-ibgp --topo bgp-ebgp-ibgp.topo`
+地址配置：`ensp preset bgp-ebgp-ibgp --config [目录]`
 - 验收：`ensp verify bgp-ebgp-ibgp --topology bgp-ebgp-ibgp.topo`（2 条断言）
 
 **教材章节**
 - HCIP · BGP 实验（手册第 89 页）
 
-### bgp-attributes — BGP 选路属性
+### bgp-attributes · BGP 选路属性
 
 - **英文名**：BGP attributes and path selection
 - **来源**：eNSP 3-3 / 3-4 BGP Attributes and Path Selection
@@ -1308,12 +1336,12 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **造出多条等价路径** — 同一前缀从两个方向学到，先确认 BGP 表里有多条 candidate
+1. **造出多条等价路径**：同一前缀从两个方向学到，先确认 BGP 表里有多条 candidate
    - 验证：`display bgp routing-table`
-2. **影响入向：local-preference** — 值大优先，只在 IBGP 内传递，用于让本 AS 偏好某个入口
-3. **影响出向：AS_PATH prepend** — 在不想被选中的方向重复本 AS 号，让对端觉得这条更长
-4. **影响出向：MED** — 值小优先，可跨 EBGP 传递，但对端不一定采纳
-5. **看清比较顺序** — weight > local-preference > 本地始发 > AS_PATH 长度 > origin > MED > EBGP 优于 IBGP > IGP cost > router-id
+2. **影响入向：local-preference**：值大优先，只在 IBGP 内传递，用于让本 AS 偏好某个入口
+3. **影响出向：AS_PATH prepend**：在不想被选中的方向重复本 AS 号，让对端觉得这条更长
+4. **影响出向：MED**：值小优先，可跨 EBGP 传递，但对端不一定采纳
+5. **看清比较顺序**：weight > local-preference > 本地始发 > AS_PATH 长度 > origin > MED > EBGP 优于 IBGP > IGP cost > router-id
    - 验证：`display bgp routing-table 10.0.0.0`
 
 **易错点**
@@ -1340,13 +1368,14 @@ ensp up ospf-single.topo
 | R4 | GigabitEthernet0/0/1 | 10.0.34.4/24 |  |
 
 生成：`ensp preset bgp-attributes --topo bgp-attributes.topo`
-- 验收：`ensp verify bgp-attributes --topology bgp-attributes.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset bgp-attributes --config [目录]`
+- 验收：`ensp verify bgp-attributes --topology bgp-attributes.topo`（1 条断言）
 
 **教材章节**
 - HCIP · BGP 高级特性实验（手册第 27 页）
 - HCIP · 路由策略与路由控制实验（手册第 154 页）
 
-### bgp-aggregation — BGP 路由聚合与团体属性
+### bgp-aggregation · BGP 路由聚合与团体属性
 
 - **英文名**：BGP aggregation and communities
 - **来源**：eNSP 3-2 BGP Route Aggregation
@@ -1355,13 +1384,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **先有可聚合的明细** — 至少两条同前缀长度的明细路由在 BGP 表中
+1. **先有可聚合的明细**：至少两条同前缀长度的明细路由在 BGP 表中
    - 验证：`display bgp routing-table`
-2. **配 aggregate** — 指定聚合网段与掩码，默认同时发布聚合与明细
+2. **配 aggregate**：指定聚合网段与掩码，默认同时发布聚合与明细
    - 验证：`display bgp routing-table`
-3. **抑制明细** — detail-suppressed 只发聚合；suppress-policy 按策略选择性抑制
-4. **保留 AS_PATH 信息** — as-set 让聚合路由携带明细的 AS 集合，避免被对端当成更优路径
-5. **团体属性** — apply community 打标记，对端用 community-filter 做策略
+3. **抑制明细**：detail-suppressed 只发聚合；suppress-policy 按策略选择性抑制
+4. **保留 AS_PATH 信息**：as-set 让聚合路由携带明细的 AS 集合，避免被对端当成更优路径
+5. **团体属性**：apply community 打标记，对端用 community-filter 做策略
    - 验证：`display bgp routing-table community`
 
 **易错点**
@@ -1387,13 +1416,14 @@ ensp up ospf-single.topo
 | R1 | LoopBack2 | 10.10.3.1/24 | 聚合前明细 3 |
 
 生成：`ensp preset bgp-aggregation --topo bgp-aggregation.topo`
-- 验收：`ensp verify bgp-aggregation --topology bgp-aggregation.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset bgp-aggregation --config [目录]`
+- 验收：`ensp verify bgp-aggregation --topology bgp-aggregation.topo`（1 条断言）
 
 **教材章节**
 - HCIP · BGP 高级特性实验（手册第 27 页）
 - HCIP · BGP 实验（手册第 89 页）
 
-### bgp-troubleshooting — BGP 邻居排障
+### bgp-troubleshooting · BGP 邻居排障
 
 - **英文名**：BGP neighbour troubleshooting
 - **来源**：eNSP 3-6 BGP Troubleshooting
@@ -1402,14 +1432,14 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **读状态** — Idle 未发起；Connect/Active 在尝试 TCP；OpenSent/OpenConfirm 在协商；Established 才算成功
+1. **读状态**：Idle 未发起；Connect/Active 在尝试 TCP；OpenSent/OpenConfirm 在协商；Established 才算成功
    - 验证：`display bgp peer`
-2. **查 TCP 179** — 先确认到对端 179 端口可连，路由不可达时永远停在 Connect
+2. **查 TCP 179**：先确认到对端 179 端口可连，路由不可达时永远停在 Connect
    - 验证：`display tcp status`
-3. **查对端配置** — AS 号、peer 地址、router-id 唯一性；IBGP 是否 update-source 到 loopback
+3. **查对端配置**：AS 号、peer 地址、router-id 唯一性；IBGP 是否 update-source 到 loopback
    - 验证：`display bgp peer verbose`
-4. **查策略拦截** — ACL 或防火墙是否放行 179；EBGP 是否配了 ebgp-max-hop（非直连时）
-5. **看具体错误码** — verbose 输出里的 last error 与 notification 码直接指向原因
+4. **查策略拦截**：ACL 或防火墙是否放行 179；EBGP 是否配了 ebgp-max-hop（非直连时）
+5. **看具体错误码**：verbose 输出里的 last error 与 notification 码直接指向原因
 
 **易错点**
 
@@ -1433,14 +1463,15 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 3.3.3.3/32 |  |
 
 生成：`ensp preset bgp-troubleshooting --topo bgp-troubleshooting.topo`
-- 验收：`ensp verify bgp-troubleshooting --topology bgp-troubleshooting.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset bgp-troubleshooting --config [目录]`
+- 验收：`ensp verify bgp-troubleshooting --topology bgp-troubleshooting.topo`（2 条断言）
 
 **教材章节**
 - HCIA · 网络故障排除实验（手册第 188 页）
 - HCIP · BGP 高级特性实验（手册第 27 页）
 - HCIE · IPv4 路由技术（手册第 10 页）
 
-### stack-istack — 交换机堆叠与 iStack
+### stack-istack · 交换机堆叠与 iStack
 
 - **英文名**：Switch stacking and iStack
 - **来源**：eNSP 常规实验
@@ -1449,14 +1480,14 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **规划主备与成员编号** — 先定主交换机（priority 高）、再定成员 ID，编号必须唯一
+1. **规划主备与成员编号**：先定主交换机（priority 高）、再定成员 ID，编号必须唯一
    - 验证：`display stack`
-2. **配堆叠端口** — 用专用堆叠卡口或业务口做 stack-port，两台设备互联成环更可靠
+2. **配堆叠端口**：用专用堆叠卡口或业务口做 stack-port，两台设备互联成环更可靠
    - 验证：`display stack configuration`
-3. **上电合并** — 先配好再同时重启，成员加入后堆叠 ID 生效
-4. **跨成员聚合** — Eth-Trunk 成员口分布在不同成员上，单成员故障链路仍可用
+3. **上电合并**：先配好再同时重启，成员加入后堆叠 ID 生效
+4. **跨成员聚合**：Eth-Trunk 成员口分布在不同成员上，单成员故障链路仍可用
    - 验证：`display eth-trunk`
-5. **管理面验证** — 整机只有一个管理 IP，成员口统一编号（如 GigabitEthernet1/0/1 与 2/0/1）
+5. **管理面验证**：整机只有一个管理 IP，成员口统一编号（如 GigabitEthernet1/0/1 与 2/0/1）
    - 验证：`display interface brief`
 
 **易错点**
@@ -1478,9 +1509,10 @@ ensp up ospf-single.topo
 | SW3 | Vlanif10 | 192.168.10.253/24 | 接入设备 |
 
 生成：`ensp preset stack-istack --topo stack-istack.topo`
+地址配置：`ensp preset stack-istack --config [目录]`
 - 验收：`ensp verify stack-istack --topology stack-istack.topo`（1 条断言）
 
-### route-policy-pbr — 路由策略与策略路由
+### route-policy-pbr · 路由策略与策略路由
 
 - **英文名**：Route policy and policy-based routing
 - **来源**：eNSP 常规实验
@@ -1489,14 +1521,14 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **先写匹配条件** — ip-prefix 或 ACL 描述网段，community-filter 描述团体
+1. **先写匹配条件**：ip-prefix 或 ACL 描述网段，community-filter 描述团体
    - 验证：`display ip ip-prefix`
-2. **写 route-policy 节点** — if-match 匹配，apply 修改 cost/tag/preference；节点号小的先匹配
+2. **写 route-policy 节点**：if-match 匹配，apply 修改 cost/tag/preference；节点号小的先匹配
    - 验证：`display route-policy`
-3. **挂到协议上** — import-route 时引用，或 BGP peer 的 route-policy import/export
-4. **策略路由另行处理** — traffic classifier + behavior（redirect ip-nexthop）+ traffic policy，绑到接口 inbound
+3. **挂到协议上**：import-route 时引用，或 BGP peer 的 route-policy import/export
+4. **策略路由另行处理**：traffic classifier + behavior（redirect ip-nexthop）+ traffic policy，绑到接口 inbound
    - 验证：`display traffic policy`
-5. **验证分流** — 用 tracert 看不同源/目的的流量是否走了不同下一跳
+5. **验证分流**：用 tracert 看不同源/目的的流量是否走了不同下一跳
 
 **易错点**
 
@@ -1521,12 +1553,13 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 2.2.2.2/32 | 与出口 1 相同的地址，用于观察选路 |
 
 生成：`ensp preset route-policy-pbr --topo route-policy-pbr.topo`
-- 验收：`ensp verify route-policy-pbr --topology route-policy-pbr.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset route-policy-pbr --config [目录]`
+- 验收：`ensp verify route-policy-pbr --topology route-policy-pbr.topo`（2 条断言）
 
 **教材章节**
 - HCIP · 路由策略与路由控制实验（手册第 154 页）
 
-### bgp-route-reflector — BGP 路由反射器与联盟
+### bgp-route-reflector · BGP 路由反射器与联盟
 
 - **英文名**：BGP route reflector and confederation
 - **来源**：eNSP 3-7 / 3-8
@@ -1535,11 +1568,11 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **选 RR** — 在 RR 上把客户端指定为 reflector-client
+1. **选 RR**：在 RR 上把客户端指定为 reflector-client
    - 验证：`display bgp peer`
-2. **验证反射** — 客户端之间无需直连即可学到路由
+2. **验证反射**：客户端之间无需直连即可学到路由
    - 验证：`display bgp routing-table`
-3. **可选：联盟** — 大 AS 拆子 AS，跨子 AS 仍是 IBGP 语义
+3. **可选：联盟**：大 AS 拆子 AS，跨子 AS 仍是 IBGP 语义
 
 **易错点**
 
@@ -1562,12 +1595,13 @@ ensp up ospf-single.topo
 | EXT | GigabitEthernet0/0/0 | 10.1.24.4/24 | AS 200 |
 
 生成：`ensp preset bgp-route-reflector --topo bgp-route-reflector.topo`
+地址配置：`ensp preset bgp-route-reflector --config [目录]`
 - 验收：`ensp verify bgp-route-reflector --topology bgp-route-reflector.topo`（2 条断言）
 
 **教材章节**
 - HCIP · BGP 实验（手册第 89 页）
 
-### ipsec-vpn — IPsec VPN
+### ipsec-vpn · IPsec VPN
 
 - **英文名**：IPsec VPN
 - **来源**：eNSP HCNA Lab 3-4
@@ -1576,12 +1610,12 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **定义感兴趣流** — ACL 匹配两端私网互访
-2. **配置 IKE 提议与 keychain** — 两端参数必须完全一致
+1. **定义感兴趣流**：ACL 匹配两端私网互访
+2. **配置 IKE 提议与 keychain**：两端参数必须完全一致
    - 验证：`display ike sa`
-3. **配置 IPsec 提议与策略** — 封装模式、协议、算法两端一致
+3. **配置 IPsec 提议与策略**：封装模式、协议、算法两端一致
    - 验证：`display ipsec sa`
-4. **应用到接口** — 在公网出接口引用策略
+4. **应用到接口**：在公网出接口引用策略
    - 验证：`display ipsec policy`
 
 **易错点**
@@ -1602,9 +1636,10 @@ ensp up ospf-single.topo
 | R2 | GigabitEthernet0/0/1 | 192.168.2.254/24 | 私网侧 |
 
 生成：`ensp preset ipsec-vpn --topo ipsec-vpn.topo`
-- 验收：`ensp verify ipsec-vpn --topology ipsec-vpn.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset ipsec-vpn --config [目录]`
+- 验收：`ensp verify ipsec-vpn --topology ipsec-vpn.topo`（1 条断言）
 
-### multicast-pim-sm — 组播 PIM-SM 与 IGMP
+### multicast-pim-sm · 组播 PIM-SM 与 IGMP
 
 - **英文名**：Multicast with PIM-SM and IGMP
 - **来源**：eNSP 5-2 PIM-SM and Dynamic RP / multicast
@@ -1613,15 +1648,15 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **全局开组播** — multicast routing-enable 必须在所有组播路由器上开
+1. **全局开组播**：multicast routing-enable 必须在所有组播路由器上开
    - 验证：`display pim`
-2. **配 IGMP** — 面向接收者的接口开 igmp enable，指定版本（默认 v2）
+2. **配 IGMP**：面向接收者的接口开 igmp enable，指定版本（默认 v2）
    - 验证：`display igmp group`
-3. **配 PIM-SM** — 所有三层接口开 pim sm，形成 RPF 邻居
+3. **配 PIM-SM**：所有三层接口开 pim sm，形成 RPF 邻居
    - 验证：`display pim neighbor`
-4. **配 RP** — 静态 RP pim static-rp，或动态 BSR/C-RP；所有路由器 RP 信息必须一致
+4. **配 RP**：静态 RP pim static-rp，或动态 BSR/C-RP；所有路由器 RP 信息必须一致
    - 验证：`display pim rp-info`
-5. **验证树形** — 初始为共享树（*，G），源出现后切到 SPT（S，G）
+5. **验证树形**：初始为共享树（*，G），源出现后切到 SPT（S，G）
    - 验证：`display pim routing-table`
 
 **易错点**
@@ -1648,12 +1683,13 @@ ensp up ospf-single.topo
 | R3 | GigabitEthernet0/0/1 | 192.168.3.254/24 | 接收者网段 |
 
 生成：`ensp preset multicast-pim-sm --topo multicast-pim-sm.topo`
+地址配置：`ensp preset multicast-pim-sm --config [目录]`
 - 验收：`ensp verify multicast-pim-sm --topology multicast-pim-sm.topo`（2 条断言）
 
 **教材章节**
 - HCIP · 组播实验（手册第 179 页）
 
-### firewall-zones — 防火墙安全域与策略
+### firewall-zones · 防火墙安全域与策略
 
 - **英文名**：Firewall zones and security policies
 - **来源**：eNSP Security Authentication 延伸
@@ -1662,13 +1698,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **划分安全域** — 把接口加入 trust/untrust/dmz 域，接口必须先 firewall zone 再配策略
+1. **划分安全域**：把接口加入 trust/untrust/dmz 域，接口必须先 firewall zone 再配策略
    - 验证：`display zone`
-2. **写安全策略** — security-policy 按源/目的域 + 地址 + 服务放行；默认动作是 deny
+2. **写安全策略**：security-policy 按源/目的域 + 地址 + 服务放行；默认动作是 deny
    - 验证：`display security-policy`
-3. **配 NAT** — trust 到 untrust 用 nat-policy 做源 NAT；服务器发布用 nat server
+3. **配 NAT**：trust 到 untrust 用 nat-policy 做源 NAT；服务器发布用 nat server
    - 验证：`display nat-policy`
-4. **验证域间** — trust 到 untrust 通、untrust 到 trust 默认不通；策略计数应增长
+4. **验证域间**：trust 到 untrust 通、untrust 到 trust 默认不通；策略计数应增长
    - 验证：`display security-policy statistics`
 
 **易错点**
@@ -1694,12 +1730,13 @@ ensp up ospf-single.topo
 - 设备镜像：USG6000V 需要 eNSP 安装时勾选 USG6000V 组件（NGFW 镜像，约 1 GB）。缺镜像时 eNSP 会打开拓扑后自行退出，`ensp up` 会在启动前直接报错说明缺什么。
 
 生成：`ensp preset firewall-zones --topo firewall-zones.topo`
-- 验收：`ensp verify firewall-zones --topology firewall-zones.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset firewall-zones --config [目录]`
+- 验收：`ensp verify firewall-zones --topology firewall-zones.topo`（无专门断言，只跑本场景的验证命令并报告 unverified）
 
 **教材章节**
 - HCIP · 防火墙技术实验（手册第 208 页）
 
-### bfd-fast-convergence — BFD 快速故障检测
+### bfd-fast-convergence · BFD 快速故障检测
 
 - **英文名**：BFD fast failure detection
 - **来源**：eNSP 常规实验
@@ -1708,13 +1745,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **先建底层可达** — BFD 只做检测，不负责转发；直连或已有路由必须先通
-2. **配 BFD 会话** — bfd 全局开启后，单跳用 bfd bind peer-ip；多跳需 bfd multi-hop
+1. **先建底层可达**：BFD 只做检测，不负责转发；直连或已有路由必须先通
+2. **配 BFD 会话**：bfd 全局开启后，单跳用 bfd bind peer-ip；多跳需 bfd multi-hop
    - 验证：`display bfd session all`
-3. **调检测参数** — min-tx-interval / min-rx-interval / detect-multiplier，两端取大值协商
-4. **挂到协议上** — 静态路由 bfd enable，或 OSPF/VRRP 的 bfd 联动
+3. **调检测参数**：min-tx-interval / min-rx-interval / detect-multiplier，两端取大值协商
+4. **挂到协议上**：静态路由 bfd enable，或 OSPF/VRRP 的 bfd 联动
    - 验证：`display bfd session all verbose`
-5. **验证收敛** — 断开链路后 BFD 应在百毫秒级 Up→Down，路由表随之切换
+5. **验证收敛**：断开链路后 BFD 应在百毫秒级 Up→Down，路由表随之切换
 
 **易错点**
 
@@ -1740,13 +1777,14 @@ ensp up ospf-single.topo
 | R3 | LoopBack0 | 3.3.3.3/32 |  |
 
 生成：`ensp preset bfd-fast-convergence --topo bfd-fast-convergence.topo`
-- 验收：`ensp verify bfd-fast-convergence --topology bfd-fast-convergence.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset bfd-fast-convergence --config [目录]`
+- 验收：`ensp verify bfd-fast-convergence --topology bfd-fast-convergence.topo`（2 条断言）
 
 **教材章节**
 - HCIP · IGP 高级特性实验（手册第 6 页）
 - HCIE · IPv4 路由技术（手册第 10 页）
 
-### mpls-basic — MPLS 标签转发
+### mpls-basic · MPLS 标签转发
 
 - **英文名**：MPLS label switching
 - **来源**：eNSP 常规实验
@@ -1755,13 +1793,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **开 MPLS 与 LSR-ID** — 全局 mpls lsr-id 唯一，接口下 mpls 与 mpls ldp
+1. **开 MPLS 与 LSR-ID**：全局 mpls lsr-id 唯一，接口下 mpls 与 mpls ldp
    - 验证：`display mpls ldp peer`
-2. **建 LDP 会话** — 两端接口都要开 mpls，LDP 用 UDP 646 建会话、TCP 646 传标签
+2. **建 LDP 会话**：两端接口都要开 mpls，LDP 用 UDP 646 建会话、TCP 646 传标签
    - 验证：`display mpls ldp session`
-3. **看标签分配** — 每条 IGP 路由被分配一个入标签与出标签
+3. **看标签分配**：每条 IGP 路由被分配一个入标签与出标签
    - 验证：`display mpls lsp`
-4. **验证转发** — tracert 或 display mpls lsp 确认报文按标签而非 IP 逐跳转发
+4. **验证转发**：tracert 或 display mpls lsp 确认报文按标签而非 IP 逐跳转发
 
 **易错点**
 
@@ -1789,6 +1827,7 @@ ensp up ospf-single.topo
 | R4 | GigabitEthernet0/0/0 | 10.0.34.4/24 |  |
 
 生成：`ensp preset mpls-basic --topo mpls-basic.topo`
+地址配置：`ensp preset mpls-basic --config [目录]`
 - 验收：`ensp verify mpls-basic --topology mpls-basic.topo`（2 条断言）
 
 **教材章节**
@@ -1798,7 +1837,7 @@ ensp up ospf-single.topo
 - HCIE · EVPN（手册第 71 页）
 - HCIE · SR-MPLS 实验（手册第 336 页）
 
-### mpls-l3vpn — BGP/MPLS L3VPN
+### mpls-l3vpn · BGP/MPLS L3VPN
 
 - **英文名**：BGP/MPLS L3VPN
 - **来源**：eNSP 常规实验（HCIP 范围）
@@ -1807,14 +1846,14 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **骨干先通** — P 与 PE 之间 IGP + MPLS LDP 全部就绪
+1. **骨干先通**：P 与 PE 之间 IGP + MPLS LDP 全部就绪
    - 验证：`display mpls ldp session`
-2. **PE 上建 VRF** — ip vpn-instance 绑定 RD 与 RT，接口划入 VRF
+2. **PE 上建 VRF**：ip vpn-instance 绑定 RD 与 RT，接口划入 VRF
    - 验证：`display ip vpn-instance`
-3. **PE-CE 路由** — 静态或 OSPF 把站点路由引入 VRF
-4. **MP-BGP 传 VPNv4** — PE 间建 IBGP 并开 vpnv4 地址族，配 VPN target 控制导入导出
+3. **PE-CE 路由**：静态或 OSPF 把站点路由引入 VRF
+4. **MP-BGP 传 VPNv4**：PE 间建 IBGP 并开 vpnv4 地址族，配 VPN target 控制导入导出
    - 验证：`display bgp vpnv4 all routing-table`
-5. **验证隔离与互通** — 同 VPN 站点互通；不同 VPN 即使地址相同也互不可见
+5. **验证隔离与互通**：同 VPN 站点互通；不同 VPN 即使地址相同也互不可见
 
 **易错点**
 
@@ -1843,6 +1882,7 @@ ensp up ospf-single.topo
 | CE2 | GigabitEthernet0/0/0 | 192.168.1.20/24 |  |
 
 生成：`ensp preset mpls-l3vpn --topo mpls-l3vpn.topo`
+地址配置：`ensp preset mpls-l3vpn --config [目录]`
 - 验收：`ensp verify mpls-l3vpn --topology mpls-l3vpn.topo`（2 条断言）
 
 **教材章节**
@@ -1851,7 +1891,7 @@ ensp up ospf-single.topo
 - HCIE · SR-MPLS 实验（手册第 336 页）
 - HCIE · SRv6 实验（手册第 399 页）
 
-### dual-homed-isp — 双出口多运营商选路
+### dual-homed-isp · 双出口多运营商选路
 
 - **英文名**：Dual-homed ISP egress
 - **来源**：eNSP 常规实验（HCIP 范围）
@@ -1860,13 +1900,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **两出口各自建默认路由** — 主出口 preference 60，备出口 preference 80，形成浮动备份
+1. **两出口各自建默认路由**：主出口 preference 60，备出口 preference 80，形成浮动备份
    - 验证：`display ip routing-table protocol static`
-2. **按目的分流** — 用 ip-prefix 匹配不同运营商网段，各走各的出口，避免非对称回程
-3. **挂 BFD 加速切换** — 两条默认路由 bfd enable，链路故障百毫秒级切走
+2. **按目的分流**：用 ip-prefix 匹配不同运营商网段，各走各的出口，避免非对称回程
+3. **挂 BFD 加速切换**：两条默认路由 bfd enable，链路故障百毫秒级切走
    - 验证：`display bfd session all`
-4. **NAT 与回程** — 两出口各自做 easy-ip；运营商侧回程路由必须指回对应出口地址
-5. **验证主备与分流** — 断开主出口，走主出口的流量应切到备；tracert 确认不同目的走不同运营商
+4. **NAT 与回程**：两出口各自做 easy-ip；运营商侧回程路由必须指回对应出口地址
+5. **验证主备与分流**：断开主出口，走主出口的流量应切到备；tracert 确认不同目的走不同运营商
 
 **易错点**
 
@@ -1890,12 +1930,13 @@ ensp up ospf-single.topo
 | ISP1 | LoopBack0 | 8.8.8.8/32 | 仅 ISP1 宣告，用于观察回程选路 |
 
 生成：`ensp preset dual-homed-isp --topo dual-homed-isp.topo`
-- 验收：`ensp verify dual-homed-isp --topology dual-homed-isp.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset dual-homed-isp --config [目录]`
+- 验收：`ensp verify dual-homed-isp --topology dual-homed-isp.topo`（1 条断言）
 
 **教材章节**
 - HCIE · 广域互联网络部署（手册第 257 页）
 
-### firewall-hrp — 防火墙双机热备（HRP）
+### firewall-hrp · 防火墙双机热备（HRP）
 
 - **英文名**：Firewall HA with HRP
 - **来源**：eNSP Security 延伸
@@ -1904,15 +1945,15 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **直连心跳口** — 两台之间用独立链路配 hrp interface 与对端 remote 地址，不要与业务口混用
+1. **直连心跳口**：两台之间用独立链路配 hrp interface 与对端 remote 地址，不要与业务口混用
    - 验证：`display hrp state`
-2. **开 HRP 并定主备** — 一台 hrp enable，另一台 hrp enable + hrp standby-device
+2. **开 HRP 并定主备**：一台 hrp enable，另一台 hrp enable + hrp standby-device
    - 验证：`display hrp state`
-3. **同步内容** — hrp auto-sync 同步配置与连接表；hrp mirror session 同步状态化会话
-4. **上下行做 VRRP** — 两台在上下行接口各跑一组 VRRP，主设备优先级高并 track 上行
+3. **同步内容**：hrp auto-sync 同步配置与连接表；hrp mirror session 同步状态化会话
+4. **上下行做 VRRP**：两台在上下行接口各跑一组 VRRP，主设备优先级高并 track 上行
    - 验证：`display vrrp`
-5. **调 OSPF 代价** — hrp adjust ospf-cost enable 让备机对外发布更高 cost，避免流量被引到备机
-6. **切换验证** — 断开主设备上行，会话应保持、业务不中断
+5. **调 OSPF 代价**：hrp adjust ospf-cost enable 让备机对外发布更高 cost，避免流量被引到备机
+6. **切换验证**：断开主设备上行，会话应保持、业务不中断
    - 验证：`display hrp state / display session table`
 
 **易错点**
@@ -1940,9 +1981,10 @@ ensp up ospf-single.topo
 - 设备镜像：USG6000V 需要 eNSP 安装时勾选 USG6000V 组件（NGFW 镜像，约 1 GB）。缺镜像时 eNSP 会打开拓扑后自行退出，`ensp up` 会在启动前直接报错说明缺什么。
 
 生成：`ensp preset firewall-hrp --topo firewall-hrp.topo`
-- 验收：`ensp verify firewall-hrp --topology firewall-hrp.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset firewall-hrp --config [目录]`
+- 验收：`ensp verify firewall-hrp --topology firewall-hrp.topo`（无专门断言，只跑本场景的验证命令并报告 unverified）
 
-### spine-leaf-vxlan — Spine-Leaf 与 VXLAN 大二层
+### spine-leaf-vxlan · Spine-Leaf 与 VXLAN 大二层
 
 - **英文名**：Spine-leaf with VXLAN overlay
 - **来源**：eNSP 数据中心实验（依赖机型支持）
@@ -1951,14 +1993,14 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **先建 Underlay** — Spine-Leaf 之间 OSPF 或 BGP 打通，每台 Leaf 有 loopback 作 VTEP 地址
+1. **先建 Underlay**：Spine-Leaf 之间 OSPF 或 BGP 打通，每台 Leaf 有 loopback 作 VTEP 地址
    - 验证：`display ip routing-table`
-2. **建 NVE 接口** — interface nve 下 source 指向 VTEP 地址，配 vni 与头端复制列表
+2. **建 NVE 接口**：interface nve 下 source 指向 VTEP 地址，配 vni 与头端复制列表
    - 验证：`display nve`
-3. **建二层网关** — VNI 映射到 Bridge-Domain，BD 绑定 Vlanif 做网关
+3. **建二层网关**：VNI 映射到 Bridge-Domain，BD 绑定 Vlanif 做网关
    - 验证：`display bridge-domain`
-4. **配 EVPN 或静态头端** — EVPN 用 BGP evpn 地址族自动发现；静态则手工配 ingress-replication peer
-5. **验证迁移** — 同网段服务器在不同 Leaf 下互通，IP 不变
+4. **配 EVPN 或静态头端**：EVPN 用 BGP evpn 地址族自动发现；静态则手工配 ingress-replication peer
+5. **验证迁移**：同网段服务器在不同 Leaf 下互通，IP 不变
    - 验证：`display vxlan vni`
 
 **易错点**
@@ -1983,7 +2025,8 @@ ensp up ospf-single.topo
 | LEAF2 | Vlanif10 | 192.168.10.253/24 |  |
 
 生成：`ensp preset spine-leaf-vxlan --topo spine-leaf-vxlan.topo`
-- 验收：`ensp verify spine-leaf-vxlan --topology spine-leaf-vxlan.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset spine-leaf-vxlan --config [目录]`
+- 验收：`ensp verify spine-leaf-vxlan --topology spine-leaf-vxlan.topo`（3 条断言）
 
 **教材章节**
 - HCIP · VXLAN 与EVPN 实验（手册第 38 页）
@@ -1991,7 +2034,7 @@ ensp up ospf-single.topo
 - HCIE · VXLAN 实验（手册第 111 页）
 - HCIE · VXLAN 虚拟化园区部署（手册第 153 页）
 
-### ipsec-gre-tunnel — IPsec 与 GRE 隧道组合
+### ipsec-gre-tunnel · IPsec 与 GRE 隧道组合
 
 - **英文名**：IPsec over GRE and tunnel backup
 - **来源**：eNSP HCNA Lab 3-4 延伸
@@ -2000,14 +2043,14 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **先建 GRE 隧道** — tunnel 接口指定 source/destination 与 tunnel 地址，两端地址同网段
+1. **先建 GRE 隧道**：tunnel 接口指定 source/destination 与 tunnel 地址，两端地址同网段
    - 验证：`display interface Tunnel`
-2. **在隧道上跑路由** — 隧道口宣告进 OSPF，让两端私网通过隧道学到对方路由
+2. **在隧道上跑路由**：隧道口宣告进 OSPF，让两端私网通过隧道学到对方路由
    - 验证：`display ospf peer`
-3. **用 IPsec 保护 GRE** — 感兴趣流写 GRE 两端公网地址之间的协议 47，套 ipsec policy
+3. **用 IPsec 保护 GRE**：感兴趣流写 GRE 两端公网地址之间的协议 47，套 ipsec policy
    - 验证：`display ipsec sa`
-4. **备选：两条隧道浮动** — 两条 tunnel 配不同 cost/preference，主隧道断时切备
-5. **验证** — display ipsec sa 有加密统计；断开主链路后流量走备隧道
+4. **备选：两条隧道浮动**：两条 tunnel 配不同 cost/preference，主隧道断时切备
+5. **验证**：display ipsec sa 有加密统计；断开主链路后流量走备隧道
 
 **易错点**
 
@@ -2031,13 +2074,14 @@ ensp up ospf-single.topo
 | R2 | Tunnel0/0/0 | 10.1.1.2/24 |  |
 
 生成：`ensp preset ipsec-gre-tunnel --topo ipsec-gre-tunnel.topo`
-- 验收：`ensp verify ipsec-gre-tunnel --topology ipsec-gre-tunnel.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset ipsec-gre-tunnel --config [目录]`
+- 验收：`ensp verify ipsec-gre-tunnel --topology ipsec-gre-tunnel.topo`（1 条断言）
 
 **教材章节**
 - HCIE · MPLS VPN（手册第 52 页）
 - HCIE · 广域互联网络部署（手册第 257 页）
 
-### wlan-roaming — WLAN 漫游与 AC 高可用
+### wlan-roaming · WLAN 漫游与 AC 高可用
 
 - **英文名**：WLAN roaming and AC redundancy
 - **来源**：eNSP WLAN 实验延伸
@@ -2046,13 +2090,13 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **AP 上线** — 所有 AP 拿到管理地址并成功注册到 AC
+1. **AP 上线**：所有 AP 拿到管理地址并成功注册到 AC
    - 验证：`display ap all`
-2. **统一 SSID 与安全模板** — 同一 SSID、同一安全策略、同一 VLAN 才能二层漫游
-3. **开漫游** — 同一 AC 内默认支持；跨 AC 需配漫游组与 AC 间隧道
+2. **统一 SSID 与安全模板**：同一 SSID、同一安全策略、同一 VLAN 才能二层漫游
+3. **开漫游**：同一 AC 内默认支持；跨 AC 需配漫游组与 AC 间隧道
    - 验证：`display station roam-track`
-4. **AC 备份** — AP 配主备 AC 地址，主 AC 故障后 AP 切到备 AC 重新上线
-5. **验证漫游** — 终端移动时看 roam-track 记录，ping 应基本不丢包
+4. **AC 备份**：AP 配主备 AC 地址，主 AC 故障后 AP 切到备 AC 重新上线
+5. **验证漫游**：终端移动时看 roam-track 记录，ping 应基本不丢包
 
 **易错点**
 
@@ -2074,14 +2118,15 @@ ensp up ospf-single.topo
 | SW2 | Vlanif100 | 192.168.100.253/24 |  |
 
 生成：`ensp preset wlan-roaming --topo wlan-roaming.topo`
-- 验收：`ensp verify wlan-roaming --topology wlan-roaming.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset wlan-roaming --config [目录]`
+- 验收：`ensp verify wlan-roaming --topology wlan-roaming.topo`（1 条断言）
 
 **教材章节**
 - HCIA · WAC+FIT AP 组网实验（手册第 164 页）
 - HCIP · WLAN 实验（手册第 242 页）
 - HCIE · VXLAN 虚拟化园区部署（手册第 153 页）
 
-### campus-network — 园区网综合（双核心 + 接入 + 出口）
+### campus-network · 园区网综合（双核心 + 接入 + 出口）
 
 - **英文名**：Campus network (dual core, access, edge)
 - **来源**：eNSP Campus_Network
@@ -2090,15 +2135,15 @@ ensp up ospf-single.topo
 
 **配置顺序**
 
-1. **先二层后三层** — VLAN/Trunk/聚合先通，再上 Vlanif 与路由
+1. **先二层后三层**：VLAN/Trunk/聚合先通，再上 Vlanif 与路由
    - 验证：`display vlan`
-2. **网关冗余** — 核心间 VRRP，优先级配合 track 上行口
+2. **网关冗余**：核心间 VRRP，优先级配合 track 上行口
    - 验证：`display vrrp`
-3. **路由** — 核心到出口 OSPF 或静态，出口默认路由
+3. **路由**：核心到出口 OSPF 或静态，出口默认路由
    - 验证：`display ip routing-table`
-4. **边界** — NAT + ACL，内网出网与外网发布
+4. **边界**：NAT + ACL，内网出网与外网发布
    - 验证：`display nat session all`
-5. **可靠性验证** — 逐项断开：核心、上行、出口、专线
+5. **可靠性验证**：逐项断开：核心、上行、出口、专线
    - 验证：`display vrrp / display stp brief`
 
 **易错点**
@@ -2130,7 +2175,8 @@ ensp up ospf-single.topo
 - 设备镜像：USG6000V 需要 eNSP 安装时勾选 USG6000V 组件（NGFW 镜像，约 1 GB）。缺镜像时 eNSP 会打开拓扑后自行退出，`ensp up` 会在启动前直接报错说明缺什么。
 
 生成：`ensp preset campus-network --topo campus-network.topo`
-- 验收：`ensp verify campus-network --topology campus-network.topo`（无专门断言，逐条跑本场景的验证命令）
+地址配置：`ensp preset campus-network --config [目录]`
+- 验收：`ensp verify campus-network --topology campus-network.topo`（2 条断言）
 
 **教材章节**
 - HCIA · 园区网络综合实验（手册第 220 页）

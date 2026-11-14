@@ -582,11 +582,15 @@ export const SCENARIOS = {
     devices: '2 台路由器（串口）',
     goal: '串口封装、PPP 认证、PPPoE 拨号',
     steps: [
-      { do: '设封装类型', detail: 'HDLC 为默认；PPP 支持认证与多链路', verify: 'display interface Serial' },
-      { do: '配置认证', detail: '一端 authenticator，另一端 pap/chap 用户名密码', verify: 'display ppp interface' },
-      { do: 'PPPoE', detail: '服务端建 VT 与地址池，客户端 dialer 拨号', verify: 'display pppoe-client session summary' },
+      { do: '设封装类型', detail: '串口默认是 PPP，HDLC 要显式切换；PPP 支持认证与多链路', verify: 'display interface Serial0/0/1' },
+      { do: '配置认证', detail: '一端 authenticator，另一端 pap/chap 用户名密码', verify: 'display current-configuration interface Serial0/0/0' },
+      { do: 'PPPoE', detail: '服务端建 VT 与地址池，客户端 dialer 拨号', verify: 'display ip pool' },
     ],
-    pitfalls: ['PPP 认证两端 pap/chap 不一致会反复协商失败', '串口需先确认物理 up 且时钟配置正确'],
+    pitfalls: [
+      '串口上默认封装是 PPP，不是 HDLC，`display interface` 里的 Link layer protocol 会直接说明当前是哪种',
+      'PPP 认证两端 pap/chap 不一致会反复协商失败',
+      'PPPoE 服务端要在物理口上 `pppoe-server bind virtual-template`，地址池挂在 VT 上',
+    ],
   },
 
   'ipv6': {
@@ -1038,7 +1042,7 @@ export function renderScenario(id) {
     '',
     '## 配置顺序（只给方向，具体命令按设备补全）',
     ...s.steps.map((step, i) => {
-      const detail = step.detail ? ` — ${step.detail}` : ''
+      const detail = step.detail ? `：${step.detail}` : ''
       const verify = step.verify ? `\n   验证: ${step.verify}` : ''
       return `${i + 1}. ${step.do}${detail}${verify}`
     }),

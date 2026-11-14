@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url'
 
 import { SCENARIOS, SCENARIO_IDS, byLevel } from '../src/core/presets.mjs'
 import { LABS, LAB_IDS, hasLab, labAddressing, labDevices, labModels } from '../src/core/labs.mjs'
+import { hasLabConfig } from '../src/core/labconfig.mjs'
 import { imageNotesFor } from '../src/core/compat.mjs'
 import { hasChecks, EXPECTATIONS } from '../src/core/acceptance.mjs'
 import { curriculumFor } from '../src/core/curriculum.mjs'
@@ -103,14 +104,14 @@ function render(catalogue = SCENARIOS) {
     out.push('', `## ${LEVEL_TITLES[level]}`, '')
     for (const id of groups[level]) {
       const s = catalogue[id]
-      out.push(`### ${id} — ${s.title}`, '')
+      out.push(`### ${id} · ${s.title}`, '')
       out.push(`- **英文名**：${s.titleEn}`)
       out.push(`- **来源**：${s.source}`)
       out.push(`- **设备**：${s.devices}`)
       out.push(`- **目标**：${s.goal}`)
       out.push('', '**配置顺序**', '')
       s.steps.forEach((step, i) => {
-        const detail = step.detail ? ` — ${step.detail}` : ''
+        const detail = step.detail ? `：${step.detail}` : ''
         out.push(`${i + 1}. **${step.do}**${detail}`)
         if (step.verify) out.push(`   - 验证：\`${step.verify}\``)
       })
@@ -133,9 +134,12 @@ function render(catalogue = SCENARIOS) {
         const notes = imageNotesFor(labModels(id))
         for (const [model, note] of notes) out.push(`- 设备镜像：${model} ${note}`)
         out.push('', `生成：\`ensp preset ${id} --topo ${id}.topo\``)
+        if (hasLabConfig(id)) {
+          out.push(`地址配置：\`ensp preset ${id} --config [目录]\``)
+        }
         const verifyLine = hasChecks(id)
           ? `- 验收：\`ensp verify ${id} --topology ${id}.topo\`（${EXPECTATIONS[id].length} 条断言）`
-          : `- 验收：\`ensp verify ${id} --topology ${id}.topo\`（无专门断言，逐条跑本场景的验证命令）`
+          : `- 验收：\`ensp verify ${id} --topology ${id}.topo\`（无专门断言，只跑本场景的验证命令并报告 unverified）`
         out.push(verifyLine)
       }
 

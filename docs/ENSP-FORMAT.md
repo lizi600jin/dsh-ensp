@@ -1,7 +1,7 @@
-# eNSP topology format — verified reference
+# eNSP topology format: verified reference
 
 Every rule below was derived from the **40 sample topologies shipped with eNSP**
-(`E:\Huawei\eNSP\examples\**\*.topo`) and confirmed by opening generated files in
+(`<eNSP install>\examples\**\*.topo`, wherever you installed it) and confirmed by opening generated files in
 eNSP. Nothing here is guessed; where a rule could not be established it is marked
 **UNVERIFIED** rather than assumed.
 
@@ -18,7 +18,7 @@ node scripts/survey-topologies.mjs   # prints the tables this document summarise
 | Rule | Value |
 |---|---|
 | Text encoding | **UTF-8** (no BOM), despite the declaration |
-| XML declaration | `<?xml version="1.0" encoding="UNICODE" ?>` — eNSP writes `UNICODE` but saves UTF-8 |
+| XML declaration | `<?xml version="1.0" encoding="UNICODE" ?>`: eNSP writes `UNICODE` but saves UTF-8 |
 | Root element | `<topo version="1.2.00.390">` (newest samples; `1.3.00.100` also accepted) |
 | Child order | `<devices>` → `<lines>` → `<shapes />` → `<txttips />` |
 | Empty elements | self-closing (`<shapes />`), not `<shapes></shapes>` |
@@ -56,8 +56,8 @@ Attribute order: `id name poe model settings system_mac com_port bootmode cx cy 
 |---|---|---|
 | `edit_left` | `cx + 27` | every sample, no exceptions |
 | `edit_top` | `cy + 54` | every sample, no exceptions |
-| `id` | UUID; eNSP writes **lowercase** in newer files, mixed case in older | — |
-| `com_port` | console TCP port; `0` for models without a console (PC, Server, Cloud) | — |
+| `id` | UUID; eNSP writes **lowercase** in newer files, mixed case in older | n/a |
+| `com_port` | console TCP port; `0` for models without a console (PC, Server, Cloud) | n/a |
 | `bootmode` | `1` in practice; does **not** auto-start devices | tested: bootmode=1 + open ⇒ no boot |
 
 > `system_mac` is absent from router/switch/PC entries in native files. Writing it
@@ -65,7 +65,7 @@ Attribute order: `id name poe model settings system_mac com_port bootmode cx cy 
 
 ---
 
-## 3. `<slot>` and `<interface>` — the part that breaks silently
+## 3. `<slot>` and `<interface>`, the part that breaks silently
 
 Every device has exactly one slot:
 
@@ -114,12 +114,12 @@ The CLI name order was confirmed on a live device: `display interface brief` lis
 > **`PC` declares `interfacename="GE"`, not `"Ethernet"`.** An earlier version of
 > this project wrote `Ethernet` for PCs on the theory that a PC has one Ethernet
 > port; that produced an empty canvas. The CLI name of that single port is still
-> `Ethernet0/0/1` — the file's `interfacename` and the CLI name are different
+> `Ethernet0/0/1`: the file's `interfacename` and the CLI name are different
 > vocabularies.
 
 ### Models not present in the samples
 
-`AR2240`, `USG5500`, `USG6000V`, `Server`, `STA`, `Cellphone` — **UNVERIFIED**.
+`AR2240`, `USG5500`, `USG6000V`, `Server`, `STA`, `Cellphone`: **UNVERIFIED**.
 `AR2240` is believed to be `Ethernet/GE×4` (its predecessor AR2220 style), but no
 bundled file proves it. Generate one by hand in eNSP and diff before relying on it.
 

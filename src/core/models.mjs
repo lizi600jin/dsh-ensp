@@ -184,28 +184,37 @@ function cliPrefixForGroup(sztype, enspPrefix, model, groupIndex) {
  */
 export function portsFromDeclarations(declarations, model) {
   if (!declarations?.length) return []
-  const base = MODEL_SPECS[model]?.base ?? 0
+  const spec = MODEL_SPECS[model]
+  const base = spec?.base ?? 0
+
+  // The file records how many ports a group has, not the number they start from.
+  // An AR2220 writes `GE count="1"` and then `GE count="2"`, and reading both from
+  // `base` produced `GigabitEthernet0/0/0` twice: flat index 1 came back as port 0,
+  // so every link into the second group were labelled with the wrong interface.
+  // The model table knows the real numbering, so it supplies the first number for
+  // the nth group of a given interface family.
+  const specbyFamily = new Map()
+  for (const group of spec?.groups ?? []) {
+    const key = `${group[0]}:${group[1]}`
+    if (!specbyFamily.has(key)) specbyFamily.set(key, [])
+    specbyFamily.get(key).push(group)
+  }
+  const ordinals = new Map()
+
   const ports = []
-  declarations.forEach((d, groupIndex) => {
-    const first = d.firstNumber ?? base
-    const cli = cliPrefixForGroup(d.sztype, d.name, model, groupIndex)
+  declarations.forEach((d) => {
+    const key = `${d.sztype}:${d.name}`
+    const ordinal = ordinals.get(key) ?? 0
+    ordinals.set(key, ordinal + 1)
+    const fromSpec = specbyFamily.get(key)?.[ordinal]
+    const first = d.firstNumber ?? fromSpec?.[3] ?? base
+    // `cliPrefixForGroup` reads the override of the group at the index it is given,
+    // so it is only asked when the spec has no matching group; asking it with the
+    // per-family ordinal would hand back another group's override.
+    const cli = fromSpec ? (fromSpec[4] ?? cliPrefixForGroup(d.sztype, d.name, model, -1)) : cliPrefixForGroup(d.sztype, d.name, model, ordinal)
     for (let i = 0; i < d.count; i += 1) ports.push(`${cli}${first + i}`)
   })
   return ports
-}
-
-/**
- * Resident interface declarations of a model, as `{sztype, name, count, firstNumber}`.
- *
- * Callers use this when they need to emit the `<interface>` block for a device.
- */
-export function declarationsFor(model) {
-  return (MODEL_SPECS[model]?.groups ?? []).map(([sztype, name, count, firstNumber]) => ({
-    sztype,
-    name,
-    count,
-    firstNumber: firstNumber ?? null,
-  }))
 }
 
 /** Total declared interface count for a model. */

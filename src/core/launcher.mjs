@@ -477,7 +477,7 @@ function reopenTopology(topology) {
 /**
  * Take a screenshot of the client's canvas, cropped to the drawing area.
  *
- * Used by `topologyRendered` and by the probe diagnostics. The canvas excludes the
+ * Used by the probe diagnostics. The canvas excludes the
  * left device palette and the toolbar, so anything found inside it came from the
  * open topology.
  *
@@ -509,14 +509,57 @@ $bmp.Dispose(); $g.Dispose()
 }
 
 /**
+ * How many devices the open topology has on its canvas.
+ *
+ * The canvas itself is painted with DirectX, so it has no window tree, but eNSP
+ * gives every device on the canvas a hidden `Edit` child of the frame window. The
+ * count matches the device count exactly: the welcome page has none, one device has
+ * one, three devices have three.
+ *
+ * This replaced a pixel heuristic that compared saturated-blue and near-black
+ * pixel counts against fixed thresholds. That heuristic was wrong in both
+ * directions. A single-device lab scores about 1980 icon pixels and 16 dark ones
+ * (there are no link strokes to count) so it was reported as "never rendered" and
+ * the launch retried until it gave up, while the welcome page scores 4010 and 2517
+ * and was accepted as a rendered lab.
+ *
+ * @param {string} hwnd
+ * @returns {number} device count, or -1 when the window cannot be read
+ */
+export function canvasDeviceCount(hwnd) {
+  const r = runPowerShell(
+    `
+Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public class CanvasProbe {
+  public delegate bool EnumProc(IntPtr h, IntPtr p);
+  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumProc f, IntPtr p);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassNameW(IntPtr h, StringBuilder s, int n);
+  public static int CountEdits(IntPtr parent) {
+    int n = 0;
+    EnumChildWindows(parent, delegate (IntPtr h, IntPtr p) {
+      StringBuilder sb = new StringBuilder(256);
+      GetClassNameW(h, sb, 256);
+      if (sb.ToString() == "Edit") { n++; }
+      return true;
+    }, IntPtr.Zero);
+    return n;
+  }
+}
+'@
+'edits=' + [CanvasProbe]::CountEdits([IntPtr]::new([int64]${hwnd}))
+`,
+    { timeoutMs: 20000 },
+  )
+  if (!r.ok) return -1
+  const m = /edits=(-?\d+)/.exec(r.stdout)
+  return m ? Number(m[1]) : -1
+}
+
+/**
  * Does the open topology show devices on the canvas?
- *
- * eNSP paints with DirectX, so there is no window tree to query. Two independent
- * signals are combined, because either alone is weak:
- *
- *   1. **Icon colour.** Device icons are a saturated blue on a pale canvas; the
- *      empty canvas has no such pixels.
- *   2. **Link lines.** Rendered links are near-black thin strokes across the canvas.
  *
  * This is the check that gates "the topology actually opened". Callers retry on a
  * negative result rather than reporting success for a blank window.
@@ -525,36 +568,7 @@ $bmp.Dispose(); $g.Dispose()
  * @returns {boolean}
  */
 export function topologyRendered(hwnd) {
-  const png = captureCanvas(hwnd)
-  if (!png) return false
-  const r = runPowerShell(
-    `
-Add-Type -AssemblyName System.Drawing
-$bmp = [System.Drawing.Bitmap]::FromFile('${png.replace(/\\/g, '\\\\')}')
-$w = $bmp.Width; $ht = $bmp.Height
-# Canvas only: skip the palette column and the toolbar band.
-$x0 = [int]($w * 0.22); $x1 = [int]($w * 0.97)
-$y0 = [int]($ht * 0.10); $y1 = [int]($ht * 0.92)
-$icon = 0; $dark = 0
-for ($y = $y0; $y -lt $y1; $y += 2) {
-  for ($x = $x0; $x -lt $x1; $x += 2) {
-    $c = $bmp.GetPixel($x, $y)
-    if ($c.B -gt 140 -and ($c.B - $c.R) -gt 55 -and ($c.B - $c.G) -gt 25) { $icon++ }
-    elseif ($c.R -lt 90 -and $c.G -lt 90 -and $c.B -lt 90) { $dark++ }
-  }
-}
-$bmp.Dispose()
-'icon=' + $icon + ' dark=' + $dark
-`,
-    { timeoutMs: 40000 },
-  )
-  if (!r.ok) return false
-  const m = /icon=(\d+) dark=(\d+)/.exec(r.stdout)
-  if (!m) return false
-  const icon = Number(m[1])
-  const dark = Number(m[2])
-  // A rendered lab shows dozens of icon pixels and a few hundred link pixels.
-  return icon >= 15 && dark >= 40
+  return canvasDeviceCount(hwnd) >= 1
 }
 
 /**
@@ -590,6 +604,51 @@ Start-Sleep -Milliseconds 250
     { timeoutMs: 20000 },
   )
   return r.ok && r.stdout.split(/\s+/).pop() === 'True'
+}
+
+/**
+ * Bring eNSP back to the front, out of the taskbar, on demand.
+ *
+ * The tool minimises eNSP while devices boot so the desktop stays usable, which
+ * leaves the user with a taskbar button and no obvious way back to a window they
+ * want to look at. A taskbar click depends on the shell's own activation logic;
+ * this does the two steps that are actually required and reports both, so a
+ * failure says which half did not happen.
+ *
+ * Restoring and raising are separate problems on this frame: `ShowWindow(h, 9)`
+ * returns false and leaves the window at its icon size, while
+ * `WM_SYSCOMMAND/SC_RESTORE` does the real work (measured from a medium integrity
+ * process, the same tier as Explorer, so it works for a taskbar click too).
+ *
+ * @param {string} hwnd
+ * @returns {{found: boolean, restored: boolean, raised: boolean, foreground: string|null}}
+ */
+export function showEnsp(hwnd) {
+  if (!hwnd || !windowAlive(hwnd)) {
+    return { found: false, restored: false, raised: false, foreground: null }
+  }
+  const r = runPowerShell(
+    `
+$h = [IntPtr]::new([int64]${hwnd})
+$wasIconic = [EnspWin]::IsIconic($h)
+[EnspWin]::RestoreWindow($h)
+Start-Sleep -Milliseconds 250
+$restored = -not [EnspWin]::IsIconic($h)
+$raised = [EnspWin]::FocusWindow($h)
+Start-Sleep -Milliseconds 250
+$fg = [EnspWin]::GetForegroundWindow()
+"FOUND=True WASICONIC=$wasIconic RESTORED=$restored RAISED=$raised FOREGROUND=" + ([int64]$fg).ToString() + " INFRONT=" + ($fg -eq $h)
+`,
+    { timeoutMs: 20000 },
+  )
+  const text = r.stdout || ''
+  const m = /FOREGROUND=(-?\d+)/.exec(text)
+  return {
+    found: /FOUND=True/i.test(text),
+    restored: /RESTORED=True/i.test(text),
+    raised: /INFRONT=True/i.test(text),
+    foreground: m ? m[1] : null,
+  }
 }
 
 /**

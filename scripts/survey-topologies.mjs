@@ -12,11 +12,20 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 
-const DEFAULT_ROOTS = [
-  'E:/Huawei/eNSP/examples',
-  'C:/Program Files/Huawei/eNSP/examples',
-  '/opt/ensp/examples',
-]
+import { resolveEnspRoot } from '../src/core/paths.mjs'
+
+/** Locations to scan when `ENSP_EXAMPLES` says nothing; the install on this machine comes first. */
+function defaultRoots() {
+  const installed = resolveEnspRoot()
+  const roots = installed ? [path.join(installed, 'examples')] : []
+  roots.push(
+    'C:/Program Files/Huawei/eNSP/examples',
+    'D:/Huawei/eNSP/examples',
+    'E:/Huawei/eNSP/examples',
+    '/opt/ensp/examples',
+  )
+  return roots
+}
 
 /** Recursively collect .topo paths. */
 function findTopologies(root, out = []) {
@@ -103,7 +112,7 @@ function inspect(file) {
 function main() {
   const json = process.argv.includes('--json')
   const roots = (process.env.ENSP_EXAMPLES ?? '').split(path.delimiter).filter(Boolean)
-  const searchRoots = roots.length ? roots : DEFAULT_ROOTS
+  const searchRoots = roots.length ? roots : defaultRoots()
 
   const files = searchRoots.flatMap((r) => findTopologies(r))
   if (!files.length) {

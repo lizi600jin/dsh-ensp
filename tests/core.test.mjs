@@ -8,7 +8,9 @@
  */
 
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 
 import { conform } from '../src/dsh/index.mjs'
@@ -25,6 +27,18 @@ import {
 } from '../src/core/topology.mjs'
 import { buildTopology, twoPcLab, twoPcLabConfig, MODEL_SPECS, vrpToFlatIndex } from '../src/core/build.mjs'
 import { planFor, resolveDevice, hasChecks, evaluateAssertion } from '../src/core/acceptance.mjs'
+import {
+  addressCommand,
+  countLabConfigs,
+  hasLabConfig,
+  labConfigScript,
+  labConfigs,
+  maskFromPrefix,
+} from '../src/core/labconfig.mjs'
+import { LAB_IDS, labAddressing } from '../src/core/labs.mjs'
+import { buildDocx, zip } from '../src/core/docx.mjs'
+import { buildReportBlocks, collectEvidence, writeReport } from '../src/core/report.mjs'
+import { docxText } from '../src/core/ooxml.mjs'
 
 test('viewOf: hostnames containing hyphens are still system view', () => {
   // Real failure: `[R1-TEST]` was classified as a sub-view because it contains a
@@ -203,7 +217,7 @@ test('DSH tool definitions satisfy the harness schema contract', async () => {
   const plugin = await import('../src/dsh/index.mjs')
   plugin.apply(ctx)
 
-  assert.equal(registered.length, 15, 'expected 15 tools')
+  assert.equal(registered.length, 17, 'expected 17 tools')
 
   const violations = (node, path = 's') => {
     const bad = []
@@ -229,6 +243,49 @@ test('DSH tool definitions satisfy the harness schema contract', async () => {
     assert.equal(typeof tool.output.render, 'function', `${tool.name} needs output.render`)
     assert.deepEqual(violations(tool.output.schema), [], `${tool.name} schema has leaf required markers`)
   }
+})
+
+test('the MCP and DSH tool tables stay in step', async () => {
+  // Both front ends publish the same operations, so a rename, a reorder or a
+  // reworded parameter has to happen once and reach both. Before `tools.mjs`
+  // the two tables were written out separately and had already drifted (the
+  // order differed, and a couple of argument descriptions contradicted each
+  // other), which is why this compares the published order rather than the set.
+  const captured = []
+  const { apply } = await import('../src/dsh/index.mjs')
+  apply({ tools: { register: (def) => (captured.push(def), () => {}) } })
+
+  const { TOOLS } = await import('../src/mcp/server.mjs')
+
+  assert.equal(TOOLS.length, 17, 'expected 17 tools')
+  assert.deepEqual(captured.map((t) => t.name), TOOLS.map((t) => t.name))
+
+  for (const dshTool of captured) {
+    const mcpTool = TOOLS.find((t) => t.name === dshTool.name)
+    assert.ok(mcpTool, `${dshTool.name} is missing from the MCP table`)
+    assert.equal(dshTool.description, mcpTool.description, `${dshTool.name} descriptions diverged`)
+    assert.deepEqual(
+      Object.keys(dshTool.parameters ?? {}),
+      Object.keys(mcpTool.inputSchema.properties ?? {}),
+      `${dshTool.name} argument names or their order diverged`,
+    )
+  }
+})
+
+test('tool parameter schemas are not shared between the two front ends', async () => {
+  // The specs are a module-level table: handing the same node objects to both
+  // adapters would let either of them mutate the other's schema, so each side
+  // must hold its own copy.
+  const captured = []
+  const { apply } = await import('../src/dsh/index.mjs')
+  apply({ tools: { register: (def) => (captured.push(def), () => {}) } })
+
+  const { TOOLS } = await import('../src/mcp/server.mjs')
+
+  const dshNode = captured[0].parameters.topology
+  const mcpNode = TOOLS[0].inputSchema.properties.topology
+  assert.notStrictEqual(dshNode, mcpNode)
+  assert.deepEqual(dshNode, mcpNode, 'the copies must still carry the same schema')
 })
 
 test('generated topology renders (documents the zombie-process trap)', async () => {
@@ -382,6 +439,147 @@ test('availability does not depend on the catalogue being readable', async () =>
   }
 })
 
+test('plugin images are found from the template, not from a fixed path', async () => {
+  // The bug this guards: only USG6000V had a hand-written image path, so every
+  // other plugin model (NE40E, NE5000E, NE9000, CX, CE6800, CE12800) was reported
+  // as available on machines where its disk image had never been installed. eNSP
+  // then opens the topology, paints it, and quits, which reads as a console that
+  // never answered.
+  const { probeDevice, pluginMediaFiles, clearCatalogueCache } = await import(
+    '../src/core/compat.mjs'
+  )
+  const install = mkdtempSync(join(tmpdir(), 'ensp-media-'))
+  const exe = join(install, 'eNSP_Client.exe')
+  const previous = process.env.DSH_ENSP_EXE
+  try {
+    mkdirSync(join(install, 'res'), { recursive: true })
+    mkdirSync(join(install, 'plugin', 'ne', 'Tools', 'svrp'), { recursive: true })
+    mkdirSync(join(install, 'plugin', 'ne', 'Database'), { recursive: true })
+    writeFileSync(exe, '')
+    writeFileSync(join(install, 'plugin', 'ne', 'SVRP_Plugin_NE.dll'), '')
+    writeFileSync(
+      join(install, 'res', 'items.xml'),
+      '<model name="NE40E"><executable isplugin="1" path="ne\\SVRP_Plugin_NE.dll"/></model>',
+    )
+    writeFileSync(
+      join(install, 'plugin', 'ne', 'Tools', 'svrp', 'NE40E.xml'),
+      '<VirtualBox><HardDisk location="../../Database/NE40E.img"/></VirtualBox>',
+    )
+    clearCatalogueCache()
+    process.env.DSH_ENSP_EXE = exe
+
+    const media = pluginMediaFiles('NE40E')
+    assert.equal(media.length, 1, 'the template should name exactly one disk image')
+    assert.ok(
+      media[0].endsWith(join('plugin', 'ne', 'Database', 'NE40E.img')),
+      `resolved to ${media[0]}`,
+    )
+    assert.equal(
+      probeDevice('NE40E').available,
+      false,
+      'an uninstalled NE40E image must block the topology',
+    )
+
+    writeFileSync(join(install, 'plugin', 'ne', 'Database', 'NE40E.img'), '')
+    assert.equal(probeDevice('NE40E').available, true, 'a present image must not block')
+
+    // A machine-local install keeps working: none of this depends on where eNSP is.
+    assert.equal(probeDevice('AR2220').available, true)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_ENSP_EXE
+    else process.env.DSH_ENSP_EXE = previous
+    clearCatalogueCache()
+    rmSync(install, { recursive: true, force: true })
+  }
+})
+
+test('a missing device image can be installed where the template points', async () => {
+  // What the user has to do by hand otherwise: find where this particular
+  // installation keeps its images, copy the file there, and fix ImgFile in the
+  // plugin system.ini. The destination comes from the template, never from a
+  // hardcoded path.
+  const { pluginMediaPlan, pluginModels, installPluginMedia, probeDevice, clearCatalogueCache } =
+    await import('../src/core/compat.mjs')
+  const install = mkdtempSync(join(tmpdir(), 'ensp-image-'))
+  const previous = process.env.DSH_ENSP_EXE
+  try {
+    mkdirSync(join(install, 'res'), { recursive: true })
+    mkdirSync(join(install, 'plugin', 'ngfw', 'tools', 'ngfw'), { recursive: true })
+    mkdirSync(join(install, 'plugin', 'ngfw', 'System'), { recursive: true })
+    writeFileSync(join(install, 'eNSP_Client.exe'), '')
+    writeFileSync(join(install, 'plugin', 'ngfw', 'ngfw_Plugin.dll'), '')
+    writeFileSync(
+      join(install, 'res', 'items.xml'),
+      '<model name="USG6000V"><executable isplugin="1" path="ngfw\\ngfw_Plugin.dll"/></model>',
+    )
+    writeFileSync(
+      join(install, 'plugin', 'ngfw', 'tools', 'ngfw', 'vfw_usg.vbox'),
+      '<VirtualBox><HardDisk location="../../DataBase/vfw_usg.vdi"/></VirtualBox>',
+    )
+    writeFileSync(join(install, 'plugin', 'ngfw', 'System', 'system.ini'), '[SYSTEM]\nImgFile = \n')
+    const image = join(install, 'downloaded.vdi')
+    writeFileSync(image, 'x'.repeat(1024))
+
+    clearCatalogueCache()
+    process.env.DSH_ENSP_EXE = join(install, 'eNSP_Client.exe')
+
+    assert.deepEqual(pluginModels(), ['USG6000V'], 'the catalogue should name the plugin model')
+    assert.equal(pluginMediaPlan('USG6000V').ready, false)
+    assert.equal(probeDevice('USG6000V').available, false)
+
+    const result = installPluginMedia('USG6000V', image)
+    assert.equal(result.bytes, 1024)
+    assert.ok(result.target.endsWith(join('DataBase', 'vfw_usg.vdi')), `target was ${result.target}`)
+    assert.equal(result.iniUpdated, true, 'ImgFile should point at the installed image')
+    assert.equal(pluginMediaPlan('USG6000V').ready, true)
+    assert.equal(probeDevice('USG6000V').available, true)
+
+    // Installing again is a no-op, which matters for anyone scripting this.
+    assert.equal(installPluginMedia('USG6000V', image).bytes, 0)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_ENSP_EXE
+    else process.env.DSH_ENSP_EXE = previous
+    clearCatalogueCache()
+    rmSync(install, { recursive: true, force: true })
+  }
+})
+
+test('the default install root comes from this machine, not from a fixed path', async () => {
+  // The bug this guards: probeDevice defaulted to `E:\Huawei\eNSP`. On a machine
+  // that installs eNSP anywhere else the probe read a directory that does not
+  // exist, so the NGFW image was reported missing even when it was installed, and
+  // a perfectly usable USG6000V lab was blocked for no reason.
+  const { probeDevice, clearCatalogueCache } = await import('../src/core/compat.mjs')
+  const install = mkdtempSync(join(tmpdir(), 'ensp-root-'))
+  const exe = join(install, 'eNSP_Client.exe')
+  const previous = process.env.DSH_ENSP_EXE
+  try {
+    mkdirSync(join(install, 'res'), { recursive: true })
+    mkdirSync(join(install, 'plugin', 'ngfw', 'DataBase'), { recursive: true })
+    writeFileSync(exe, '')
+    writeFileSync(join(install, 'plugin', 'ngfw', 'ngfw.dll'), '')
+    writeFileSync(join(install, 'plugin', 'ngfw', 'DataBase', 'vfw_usg.vdi'), '')
+    writeFileSync(
+      join(install, 'res', 'items.xml'),
+      '<model name="USG6000V"><executable isplugin="1" path="ngfw/ngfw.dll"/></model>',
+    )
+    clearCatalogueCache()
+    process.env.DSH_ENSP_EXE = exe
+
+    // No `root` argument: the probe has to find the installation by itself.
+    assert.equal(
+      probeDevice('USG6000V').available,
+      true,
+      'probeDevice ignored the install location on this machine',
+    )
+  } finally {
+    if (previous === undefined) delete process.env.DSH_ENSP_EXE
+    else process.env.DSH_ENSP_EXE = previous
+    clearCatalogueCache()
+    rmSync(install, { recursive: true, force: true })
+  }
+})
+
 test('a fully supported topology passes the availability check', async () => {
   const { checkTopologySupport } = await import('../src/core/compat.mjs')
   const { buildScenarioTopology } = await import('../src/core/labs.mjs')
@@ -440,7 +638,9 @@ test('acceptance assertions actually distinguish pass from fail', async () => {
 
 test('every scenario gets a verification plan, curated or smoke', async () => {
   // planFor must never return nothing: a scenario without hand-written asserts
-  // falls back to the commands its own steps already name.
+  // falls back to the commands its own steps already name. Those checks carry no
+  // target device when the plan is built without a topology, because a scenario's
+  // `devices` field is prose and not a device list.
   const { planFor, hasChecks, EXPECTATIONS } = await import('../src/core/acceptance.mjs')
   const { SCENARIO_IDS } = await import('../src/core/presets.mjs')
 
@@ -452,13 +652,91 @@ test('every scenario gets a verification plan, curated or smoke', async () => {
     assert.ok(plan.checks.length > 0, `${id}: plan must contain at least one check`)
     for (const check of plan.checks) {
       assert.ok(check.command, `${id}: check needs a command`)
-      assert.ok(check.on, `${id}: check needs a target device`)
       assert.equal(check.kind, hasChecks(id) ? 'assert' : 'smoke', `${id}: wrong check kind`)
+      assert.equal(check.asserted, hasChecks(id), `${id}: asserted flag must match the check kind`)
+      if (hasChecks(id)) assert.ok(check.on, `${id}: a curated check needs a target device`)
+    }
+    // With a topology in hand, smoke checks do get a device to run on.
+    const withDevices = planFor(id, { devices: ['DEV1', 'DEV2'] })
+    for (const check of withDevices.checks) {
+      if (check.kind === 'smoke') assert.equal(check.on, 'DEV1', `${id}: smoke checks run on the first available device`)
     }
   }
   for (const [id, checks] of Object.entries(EXPECTATIONS)) {
     assert.ok(SCENARIO_IDS.includes(id), `${id}: curated checks for unknown scenario`)
     assert.ok(checks.length > 0, `${id}: curated list must not be empty`)
+  }
+})
+
+test('smoke checks admit they assert nothing instead of reporting a pass', async () => {
+  // The failure this pins: a lab that was never configured answered every command,
+  // no expectation was attached, and the report said "6/6 checks passed".
+  const { runAcceptance, formatAcceptance } = await import('../src/core/acceptance.mjs')
+  const factory = async () => ({ ok: true, output: '#\n port link-type access\n ---- More ----\n' })
+  const report = await runAcceptance({
+    id: 'firewall-zones',
+    ports: new Map([['FW1', 2000], ['R-TRUST', 2001]]),
+    query: factory,
+    waitMs: 0,
+  })
+  assert.equal(report.ok, null, 'an unasserted lab cannot be reported as ok')
+  assert.equal(report.passed, 0, 'nothing passed, because nothing was asserted')
+  assert.equal(report.unverified, report.total)
+  assert.ok(report.results.every((r) => r.pass === null && r.asserted === false))
+  assert.match(formatAcceptance(report), /unverified:/)
+  assert.doesNotMatch(formatAcceptance(report), /checks passed/)
+
+  // A curated scenario on the same dead lab must still fail, so the change did not
+  // just turn every report grey.
+  const curated = await runAcceptance({
+    id: 'ospf-single',
+    ports: new Map([['R1', 2000], ['R2', 2000], ['R3', 2000]]),
+    query: factory,
+    waitMs: 0,
+  })
+  assert.equal(curated.ok, false)
+  assert.ok(curated.failed > 0)
+})
+
+test('smoke plans keep interface names whole and use unique check ids', async () => {
+  const { planFor } = await import('../src/core/acceptance.mjs')
+
+  // The smoke builder used to split `verify` on every `/`, which turned
+  // `display interface GigabitEthernet0/0/0 | include MTU` into three commands.
+  // Scenario assertions now carry their commands verbatim, so the slash survives on
+  // the curated path, and the smoke path only splits on a spaced separator.
+  const curated = planFor('ppp-hdlc', { devices: ['R1'] })
+  const serial = curated.checks.find((c) => c.command.includes('Serial0/0/1'))
+  assert.ok(serial, 'the serial interface command must survive planning')
+  assert.equal(serial.command, 'display interface Serial0/0/1')
+
+  // Every remaining smoke scenario: a spaced ` / ` in the steps is the only thing
+  // that may be split, and each piece has to be a command rather than a fragment.
+  for (const id of ['firewall-zones', 'firewall-hrp']) {
+    const plan = planFor(id, { devices: ['CORE1'] })
+    const ids = plan.checks.map((c) => c.id)
+    assert.equal(new Set(ids).size, ids.length, `${id}: check ids must be unique, got ${ids.join(', ')}`)
+    for (const check of plan.checks) {
+      assert.match(check.command, /^display /, `${id}: "${check.command}" is a fragment, not a command`)
+      assert.doesNotMatch(check.command, /^\d+$/, `${id}: "${check.command}" is a split index`)
+    }
+  }
+})
+
+test('curated checks name devices that exist in their own blueprint', async () => {
+  // `resolveDevice` used to map by position, so `R1` on a lab whose devices are
+  // SW1/SW2/ACC silently became ACC and the report called it a passing VRRP master
+  // check. Names that are not in the blueprint must be treated as a bug, not mapped.
+  const { EXPECTATIONS } = await import('../src/core/acceptance.mjs')
+  const { buildScenarioTopology } = await import('../src/core/labs.mjs')
+  for (const [id, checks] of Object.entries(EXPECTATIONS)) {
+    const names = buildScenarioTopology(id).devices.map((d) => d.name)
+    for (const check of checks) {
+      assert.ok(
+        names.includes(check.on),
+        `${id}: check "${check.id}" targets "${check.on}", which is not in [${names.join(', ')}]`,
+      )
+    }
   }
 })
 
@@ -468,12 +746,20 @@ test('doctor reports a fix for every failing check', async () => {
   const { doctor, formatDoctor } = await import('../src/core/doctor.mjs')
   const report = doctor({ deep: false, models: ['AR2220', 'USG6000V'] })
 
+  // `skip` means the check could not measure anything (the toolbar anchors with no
+  // eNSP running). It must say so and offer a way to measure, rather than compare a
+  // fallback against itself and call that a pass.
   assert.ok(Array.isArray(report.checks) && report.checks.length >= 6)
   for (const check of report.checks) {
-    assert.ok(['pass', 'warn', 'fail'].includes(check.status), `${check.id}: bad status`)
+    assert.ok(['pass', 'warn', 'fail', 'skip'].includes(check.status), `${check.id}: bad status`)
     assert.ok(check.detail, `${check.id}: needs a detail line`)
     if (check.status !== 'pass') assert.ok(check.fix, `${check.id}: a non-passing check needs a fix`)
   }
+  assert.deepEqual(
+    report.skipped,
+    report.checks.filter((c) => c.status === 'skip').map((c) => c.id),
+    'the skipped list must name exactly the skipped checks',
+  )
   // USG6000V has no image on a stock install, so it must be called out.
   const images = report.checks.find((c) => c.id === 'device-images')
   assert.ok(images, 'device images must be checked when models are supplied')
@@ -593,6 +879,64 @@ test('a device with added hardware uses its own declared port layout', async () 
   assert.equal(topo.links[0].srcPort, 'Serial0/0/0', 'the file, not the model table, says what index 3 is')
   assert.equal(topo.links[0].dstPort, 'Serial0/0/0')
   assert.equal(topo.devices[0].interfaces, 5, 'the declared count includes the mounted card')
+})
+
+test('a second interface group continues the numbering instead of restarting', async () => {
+  // Real failure, found in a generated report: an AR2220 declares GE count="1" and
+  // then GE count="2", and both groups were numbered from the model base, so flat
+  // index 1 came back as GigabitEthernet0/0/0. Every link into the second group was
+  // then labelled with the first group's port, and the report table printed a
+  // R1-to-R3 cable as GE0/0/0 on both ends while the real far end was GE0/0/1.
+  const xml = `<?xml version="1.0" encoding="UNICODE" ?>
+<topo version="1.2.00.390">
+  <devices>
+    <dev id="A" name="R1" model="AR2220" com_port="2000" bootmode="1" cx="0" cy="0">
+      <slot number="slot17" isMainBoard="1">
+        <interface sztype="Ethernet" interfacename="GE" count="1" />
+        <interface sztype="Ethernet" interfacename="GE" count="2" />
+      </slot>
+    </dev>
+    <dev id="B" name="R3" model="AR2220" com_port="2002" bootmode="1" cx="200" cy="0">
+      <slot number="slot17" isMainBoard="1">
+        <interface sztype="Ethernet" interfacename="GE" count="1" />
+        <interface sztype="Ethernet" interfacename="GE" count="2" />
+      </slot>
+    </dev>
+  </devices>
+  <lines>
+    <line srcDeviceID="A" destDeviceID="B">
+      <interfacePair lineName="Copper" srcIndex="1" tarIndex="1" />
+    </line>
+  </lines>
+</topo>`
+  const topo = parseTopology(xml)
+  assert.equal(topo.links[0].srcPort, 'GigabitEthernet0/0/1')
+  assert.equal(topo.links[0].dstPort, 'GigabitEthernet0/0/1')
+
+  const { portsFromDeclarations, flatIndexToVrp } = await import('../src/core/models.mjs')
+  const declarations = [
+    { sztype: 'Ethernet', name: 'GE', count: 1, firstNumber: null },
+    { sztype: 'Ethernet', name: 'GE', count: 2, firstNumber: null },
+  ]
+  assert.deepEqual(portsFromDeclarations(declarations, 'AR2220'), [
+    'GigabitEthernet0/0/0',
+    'GigabitEthernet0/0/1',
+    'GigabitEthernet0/0/2',
+  ])
+  // The two paths to a port name must agree, or the report and the driver disagree.
+  for (const model of ['AR2220', 'AR1220', 'Router', 'S3700', 'S5700', 'USG6000V', 'PC']) {
+    const { MODEL_SPECS: specs } = await import('../src/core/models.mjs')
+    const decls = specs[model].groups.map((g) => ({
+      sztype: g[0],
+      name: g[1],
+      count: g[2],
+      firstNumber: null,
+    }))
+    const fromFile = portsFromDeclarations(decls, model)
+    fromFile.forEach((port, index) => {
+      assert.equal(port, flatIndexToVrp(model, index), `${model} index ${index}`)
+    })
+  }
 })
 
 test('every port in the ICVE fixture corpus resolves to a CLI name', async () => {
@@ -884,101 +1228,33 @@ test('install paths are found by probing, not by assuming E:', async () => {
   )
 })
 
-test('the knowledge index files each question under one topic, not all of them', async () => {
-  const { knowledgeTopics, knowledgeFor, searchKnowledge } = await import('../src/core/knowledge.mjs')
-  const topics = knowledgeTopics()
-  assert.ok(topics.length >= 6, 'expected at least six topics, got ' + topics.length)
+test('the installer registry is consulted before the usual roots', async () => {
+  // An eNSP installed on F: with no entry in the four usual roots is still
+  // findable, because Inno Setup records it under the uninstall key. This test
+  // does not assert that such an entry exists here: it asserts the source code
+  // reads that key at all, which is what a machine with a non-standard install
+  // depends on.
+  const source = readFileSync(new URL('../src/core/paths.mjs', import.meta.url), 'utf8')
+  assert.ok(
+    /CurrentVersion\\+Uninstall\\+eNSP/.test(source),
+    'the uninstall key Inno Setup writes must be read',
+  )
+  assert.ok(
+    /SOFTWARE\\+Oracle\\+VirtualBox/.test(source),
+    'VirtualBox records InstallDir in the registry, so it must be read too',
+  )
 
-  // Every point carries a question, an answer and the question number it came
-  // from; a point without an answer teaches nothing.
-  const points = knowledgeFor('ospf-lsa-types')
-  assert.ok(points.length > 0, 'ospf-lsa-types should have knowledge points')
-  for (const p of points) {
-    assert.ok(typeof p.n === 'number' && p.n > 0, 'point needs a question number')
-    assert.ok(p.q && p.q.length > 5, 'point needs a question')
-    assert.ok(p.a && p.a.length > 2, 'point needs an answer')
-    assert.ok(topics.includes(p.topic), 'point topic must be a known topic')
+  const { enspCandidates, vboxCandidates } = await import('../src/core/paths.mjs')
+  for (const list of [enspCandidates(), vboxCandidates()]) {
+    const rootIndex = list.findIndex((c) => c.source === 'install root')
+    const registryIndex = list.findIndex((c) => c.source.includes('Uninstall') || c.source.includes('Oracle'))
+    if (registryIndex >= 0 && rootIndex >= 0) {
+      assert.ok(
+        registryIndex < rootIndex,
+        'a registry hit is tried before a guessed install root, because the guess may name a different copy',
+      )
+    }
   }
-
-  // An unknown scenario must inherit nothing: a knowledge section that appears on
-  // every lab would be noise rather than material for that lab.
-  assert.equal(knowledgeFor('__probe-not-a-scenario').length, 0)
-
-  // Search is case-insensitive and covers both the question and its answer.
-  assert.ok(searchKnowledge('lsa').length >= searchKnowledge('LSA').length - 1, 'search is case-insensitive')
-  assert.deepEqual(searchKnowledge(''), [], 'an empty query matches nothing')
-})
-
-test('a scenario brief carries the knowledge for the topic it teaches', async () => {
-  const { renderKnowledge, knowledgeFor } = await import('../src/core/knowledge.mjs')
-  const { knowledgeTopics } = await import('../src/core/knowledge.mjs')
-
-  // At least one scenario per covered topic must show a section; the heading is
-  // the contract the CLI and the plugins both rely on.
-  let covered = 0
-  for (const topic of knowledgeTopics()) {
-    const { SCENARIOS } = await import('../src/core/presets.mjs')
-    const owner = Object.keys(SCENARIOS).find((id) => knowledgeFor(id).some((p) => p.topic === topic))
-    if (!owner) continue
-    covered++
-    const text = renderKnowledge(owner)
-    assert.ok(text.includes('## 知识点'), owner + ' should render a knowledge section')
-    assert.ok(text.includes('答:'), owner + ' should render answers')
-  }
-  assert.ok(covered >= 5, 'expected knowledge to reach at least five scenarios, got ' + covered)
-
-  // A scenario with no topic must render nothing rather than an empty heading.
-  assert.equal(renderKnowledge('ospf-zzz-not-a-scenario'), '')
-})
-
-test('the knowledge generator is deterministic and drops unusable questions', async () => {
-  const { buildIndex } = await import('../scripts/gen-knowledge.mjs')
-
-  // A miniature source covering the three shapes the generator must handle: a
-  // multi-key answer that needs its options spelled out, an "which is wrong"
-  // question that must be dropped, and one with no machine-readable answer.
-  const source = [
-    {
-      n: 1,
-      type: '多选题',
-      stem: 'MED 属性用于向外部对等体指出进入本 AS 的首选路径，以下描述正确的是哪些项?',
-      options: [
-        { key: 'A', text: 'MED 值越小越优' },
-        { key: 'B', text: 'MED 值越大越优' },
-      ],
-      answer: 'A',
-      analysis: 'MED 值越小则 BGP 路由越优',
-    },
-    {
-      n: 2,
-      type: '单选题',
-      stem: '以下关于 OSPF LSA 的描述，错误的是哪一项?',
-      options: [{ key: 'A', text: '3 类 LSA 由 ABR 产生' }],
-      answer: 'A',
-      analysis: 'OSPF LSA',
-    },
-    {
-      n: 3,
-      type: '填空题',
-      stem: '请将 OSPF LSA 类型与其作用匹配',
-      options: [],
-      answer: '',
-      analysis: 'OSPF LSA',
-    },
-  ]
-
-  const index = buildIndex(source)
-  const points = Object.values(index.topics).flatMap((t) => t.points)
-  assert.equal(points.length, 1, 'only the usable question survives')
-  assert.equal(points[0].n, 1)
-  // The answer comes from the option text, not the analysis: "A" alone teaches
-  // nothing, and the analysis is often a restatement of the whole question.
-  assert.ok(points[0].a.startsWith('A. '), 'the key is kept')
-  assert.ok(points[0].a.includes('MED 值越小越优'), 'the chosen option text is kept')
-
-  // Same input, same output: the file is generated, so a churning diff would make
-  // every regeneration look like a change.
-  assert.deepEqual(buildIndex(source), buildIndex(source))
 })
 
 test('the curriculum index points every chapter at a real scenario', async () => {
@@ -1179,5 +1455,196 @@ test('locale metadata is readable and its detail documents ship with the package
       manifest.files.includes(top),
       'the directory holding ' + detail + ' must be in files',
     )
+  }
+})
+
+test('a blueprint addressing plan turns into commands VRP would accept', () => {
+  // The point of `labconfig.mjs` is that the table can be executed instead of
+  // retyped. A row whose prefix cannot be parsed, or a port the blueprint never
+  // declared, would produce a script that fails halfway through a device.
+  assert.equal(maskFromPrefix(24), '255.255.255.0')
+  assert.equal(maskFromPrefix(30), '255.255.255.252')
+  assert.equal(maskFromPrefix(32), '255.255.255.255')
+  assert.equal(maskFromPrefix(8), '255.0.0.0')
+  // A shift count of 32 is taken modulo 32 in JavaScript, so a naive
+  // `0xffffffff << (32 - bits)` answers /0 with 255.255.255.255.
+  assert.equal(maskFromPrefix(0), '0.0.0.0')
+  assert.equal(maskFromPrefix(1), '128.0.0.0')
+  assert.equal(addressCommand('10.0.12.1/30'), 'ip address 10.0.12.1 255.255.255.252')
+  assert.equal(addressCommand('2001:db8:1::1/128'), 'ipv6 address 2001:db8:1::1/128')
+  assert.throws(() => addressCommand('10.0.0.1'), /no prefix length/)
+  assert.throws(() => addressCommand('10.0.0.1/x'), /not a number/)
+
+  for (const id of LAB_IDS) {
+    const rows = labAddressing(id)
+    if (!rows.length) {
+      assert.equal(hasLabConfig(id), false, id + ' has no addressing, so it has no script')
+      assert.deepEqual(labConfigs(id), [], id + ' must not invent a script')
+      continue
+    }
+    assert.equal(hasLabConfig(id), true, id + ' has addressing, so it has a script')
+
+    const declared = new Set(rows.map((row) => row.device))
+    const configs = labConfigs(id)
+    assert.equal(configs.length, declared.size, id + ' emits one block per device')
+
+    for (const entry of configs) {
+      assert.ok(declared.has(entry.device), id + ' script names an undeclared device ' + entry.device)
+      const commands = parseScript(entry.script).map((c) => c.command)
+      assert.equal(commands[0], 'system-view', id + ' script starts in system view')
+      assert.equal(commands[commands.length - 1], 'return', id + ' script leaves system view')
+
+      // Scope guard: the plan is addresses only. A routing protocol here would
+      // hand the reader the answer the scenario is asking them to produce.
+      for (const command of commands) {
+        assert.match(
+          command,
+          /^(system-view|quit|return|interface \S+|ip address \S+ \S+|ipv6 address \S+)$/,
+          id + ' script leaked a non addressing command: ' + command,
+        )
+      }
+
+      // Ports must be the ones the blueprint declared, spelled the way VRP
+      // spells them.
+      const ports = commands.filter((c) => c.startsWith('interface ')).map((c) => c.slice(10))
+      const expected = rows.filter((r) => r.device === entry.device).map((r) => r.port)
+      assert.deepEqual(ports, expected, id + ' ports for ' + entry.device)
+    }
+  }
+
+  assert.equal(countLabConfigs(), LAB_IDS.filter((id) => labAddressing(id).length > 0).length)
+  assert.equal(countLabConfigs(), 45, 'five blueprints are layer 2 only and carry no addresses')
+})
+
+test('the generated script names each device once and is stable across calls', () => {
+  const first = labConfigScript('ospf-single')
+  assert.equal(first, labConfigScript('ospf-single'), 'generation must be deterministic')
+  assert.match(first, /^# R1\nsystem-view\n/)
+  assert.equal(first.split('\n# ').length, 3, 'one comment header per device')
+  assert.equal(labConfigScript('vlan-access'), '', 'a blueprint without addresses yields nothing')
+})
+
+test('a serial port is drawn as a serial line, not a copper one', () => {
+  // Wiring a Serial port with the default Copper media renders the topology and
+  // keeps the console answering, but the line never comes up and `link-protocol
+  // ppp` looks broken. eNSP stores the distinction as lineName="Serial".
+  const copper = buildTopology({}).add('R1', 'Router', { x: 0, y: 0 }).add('R2', 'Router', { x: 200, y: 0 })
+  copper.link('R1', 'GigabitEthernet0/0/0', 'R2', 'GigabitEthernet0/0/0', {}).finish()
+  const serial = buildTopology({}).add('R1', 'Router', { x: 0, y: 0 }).add('R2', 'Router', { x: 200, y: 0 })
+  serial.link('R1', 'Serial0/0/0', 'R2', 'Serial0/0/0', {}).finish()
+
+  const copperXml = copper.toXml()
+  const serialXml = serial.toXml()
+  assert.match(copperXml, /lineName="Copper"/)
+  assert.match(serialXml, /lineName="Serial"/)
+  assert.doesNotMatch(serialXml, /lineName="Copper"/)
+})
+
+test('the render gate counts devices instead of counting pixels', () => {
+  // The old gate compared saturated-blue and near-black pixel counts to fixed
+  // thresholds. A single-device lab has no link strokes, so it was reported as
+  // never rendered, while the welcome page scored high enough to count as one.
+  // The gate must therefore be structural: eNSP gives each canvas device a hidden
+  // Edit child, and the count has to reach the window API rather than the canvas.
+  const source = readFileSync(new URL('../src/core/launcher.mjs', import.meta.url), 'utf8')
+  assert.match(source, /export function canvasDeviceCount\(hwnd\)/)
+  assert.match(source, /export function topologyRendered\(hwnd\) \{\n  return canvasDeviceCount\(hwnd\) >= 1\n\}/)
+  assert.doesNotMatch(source, /icon >= 15 && dark >= 40/, 'the pixel threshold must be gone')
+  assert.doesNotMatch(source, /icon=\(\\\\d\+\) dark=/, 'the pixel counter must be gone')
+})
+
+test('the docx writer produces a package Word can open', () => {
+  // The writer has no dependency, so the only way to know the zip and the OOXML
+  // parts are well formed is to read them back with an independent reader.
+  const buffer = buildDocx([
+    { type: 'title', text: '标题' },
+    { type: 'heading', level: 1, text: '一、实验目的' },
+    { type: 'para', text: '正文含 **加粗** 与 `命令`。' },
+    { type: 'code', text: 'system-view\n sysname R1' },
+    { type: 'table', header: ['设备', '地址'], rows: [['R1', '10.0.12.1/24']] },
+  ])
+  assert.ok(buffer.length > 1000, 'a document with five blocks is not tiny')
+
+  const text = docxText(buffer)
+  assert.match(text, /标题/)
+  assert.match(text, /一、实验目的/)
+  assert.match(text, /正文含 加粗 与 命令。/, 'inline markers must become plain runs')
+  assert.match(text, /system-view/)
+  assert.match(text, /10\.0\.12\.1\/24/)
+
+  // The package must carry the four parts a reader looks for, not just document.xml.
+  const entries = zip([
+    { name: '[Content_Types].xml', data: 'x' },
+    { name: 'word/document.xml', data: 'y' },
+  ])
+  assert.match(entries.toString('latin1'), /\[Content_Types\]\.xml/)
+})
+
+test('a report says unverified when the lab proved nothing', async () => {
+  // The whole point of the three-state verdict: a lab whose checks had no
+  // assertion must not produce a document that reads like a pass.
+  const query = async () => ({ ok: true, output: '' })
+  const evidence = await collectEvidence({ id: 'firewall-zones', query })
+  assert.equal(evidence.verdict.ok, null)
+  assert.ok(evidence.checks.every((c) => c.pass === null))
+
+  const blocks = buildReportBlocks(evidence)
+  const flat = JSON.stringify(blocks)
+  assert.match(flat, /未验证/)
+  assert.doesNotMatch(flat, /验证通过/)
+})
+
+test('a report quotes each device configuration and each verification output', async () => {
+  const config = 'sysname R1\n#\ninterface GigabitEthernet0/0/0\n ip address 10.0.12.1 255.255.255.0'
+  const answers = {
+    'display current-configuration': config,
+    'display ospf peer brief': 'Area Id   Interface   Neighbor id   State\n0.0.0.0   GE0/0/0     2.2.2.2       Full',
+    'display ip routing-table protocol ospf':
+      'Destination/Mask  Proto  Pre  Cost  Flags NextHop  Interface\n10.0.23.0/24  OSPF  10  2  D  10.0.12.2  GE0/0/0',
+  }
+  const query = async ({ command }) => ({ ok: true, output: answers[command] ?? '' })
+  const evidence = await collectEvidence({ id: 'ospf-single', query })
+
+  assert.equal(evidence.verdict.ok, true)
+  assert.equal(evidence.devices.length, 3)
+  assert.equal(evidence.links.length, 3)
+  assert.equal(evidence.addressing.length, 9)
+  assert.ok(evidence.configs.every((c) => c.text.includes('sysname R1')))
+
+  // Every check keeps the device's own words, not a summary of them.
+  const peer = evidence.checks.find((c) => c.id === 'neighbour-full')
+  assert.match(peer.output, /Full/)
+  const route = evidence.checks.find((c) => c.id === 'ospf-route')
+  assert.match(route.output, /10\.0\.23\.0\/24/)
+
+  const blocks = buildReportBlocks(evidence)
+  const flat = JSON.stringify(blocks)
+  assert.match(flat, /验证通过/)
+  for (const chapter of ['一、实验目的', '二、拓扑与地址规划', '三、配置思路与命令', '四、验证结果', '五、问题与结论', '六、附录']) {
+    assert.match(flat, new RegExp(chapter), `missing chapter ${chapter}`)
+  }
+})
+
+test('writeReport writes a .docx that a reader can open', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ensp-report-'))
+  const out = join(dir, 'ospf-single.docx')
+  try {
+    const query = async ({ command }) => ({
+      ok: true,
+      output:
+        command === 'display current-configuration'
+          ? 'sysname R1'
+          : command === 'display ospf peer brief'
+            ? 'State\nFull'
+            : 'Destination/Mask Proto\n10.0.23.0/24 OSPF',
+    })
+    const result = await writeReport({ id: 'ospf-single', out, query })
+    assert.equal(result.path, out)
+    assert.ok(existsSync(out))
+    const text = docxText(readFileSync(out))
+    assert.match(text, /实验报告/)
+    assert.match(text, /10\.0\.23\.0\/24/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 })

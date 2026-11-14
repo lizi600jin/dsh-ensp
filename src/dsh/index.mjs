@@ -19,6 +19,11 @@
  * The helpers below mirror what the first-party plugins do, so the two front-ends
  * stay readable side by side.
  *
+ * The tool names, descriptions and parameter maps themselves live in
+ * `../tools.mjs`, shared with the MCP server, so the two tables cannot drift
+ * apart. What stays here is the DSH-specific half: the output schema plus render
+ * function, and the handler that produces the display-ready value.
+ *
  * @module dsh-ensp/dsh
  */
 
@@ -34,23 +39,26 @@ import {
   labAddressing,
   labDevices,
 } from '../core/labs.mjs'
-import { checkTopologySupport } from '../core/compat.mjs'
+import { countLabConfigs, hasLabConfig, labConfigScript } from '../core/labconfig.mjs'
+import { checkTopologySupport, pluginMediaPlan, pluginModels, installPluginMedia } from '../core/compat.mjs'
 import {
   enspPid,
   locateWindow,
   launchEnsp,
+  showEnsp,
   startAllDevices,
   stopAllDevices,
   waitForConsole,
 } from '../core/launcher.mjs'
 import { calibrateAnchors, inspectAnchors } from '../core/calibrate.mjs'
 import { pushConfig, pushConfigMany, queryDevice } from '../core/provision.mjs'
+import { writeReport } from '../core/report.mjs'
 import { SCENARIOS, SCENARIO_IDS, renderScenario, searchScenarios, byLevel } from '../core/presets.mjs'
 import { doctor, modelsOf } from '../core/doctor.mjs'
 import { runAcceptance, hasChecks } from '../core/acceptance.mjs'
-import { knowledgeFor, searchKnowledge, knowledgeTopics, renderKnowledge } from '../core/knowledge.mjs'
 import { curriculumFor, renderCurriculum, searchCurriculum } from '../core/curriculum.mjs'
 import { VERSION } from '../core/version.mjs'
+import { TOOL_SPECS } from '../tools.mjs'
 
 /** Declared hard dependency: the tool registry. */
 export const inject = ['tools']
@@ -148,9 +156,6 @@ function emptyFor(node) {
 /** One plain text content block. */
 const text = (value) => [{ type: 'text', text: String(value) }]
 
-/** Render a JSON payload for display without depending on any UI helper. */
-const showJson = (value) => text(JSON.stringify(value, null, 2))
-
 /**
  * Register one tool with the harness.
  *
@@ -168,6 +173,604 @@ function add(tools, definition) {
   })
 }
 
+// ---------------------------------------------------------------------------
+// Output half: the DSH-only shape, keyed by tool name
+// ---------------------------------------------------------------------------
+
+const OUTPUTS = {
+  ensp_status: {
+    schema: obj({
+      running: req(bool()),
+      pid: req(num()),
+      hwnd: req(str()),
+      anchors: req(str()),
+      devices: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (!value.running) return text('eNSP is not running.')
+      const lines = [`eNSP running, pid ${value.pid}, hwnd ${value.hwnd || '(no frame)'}`]
+      if (value.anchors) lines.push(value.anchors)
+      if (value.devices) lines.push('', value.devices)
+      if (value.error) lines.push('', value.error)
+      return text(lines.join('\n'))
+    },
+  },
+
+  ensp_build_topology: {
+    schema: obj({
+      path: req(str()),
+      devices: req(num()),
+      links: req(num()),
+      consoles: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (value.error) return text(value.error)
+      return text(
+        `wrote ${value.path}\n${value.devices} devices, ${value.links} links\nconsoles: ${value.consoles}`,
+      )
+    },
+  },
+
+  ensp_open: {
+    schema: obj({
+      pid: req(num()),
+      hwnd: req(str()),
+      reused: req(bool()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      return text(`eNSP pid ${value.pid}, hwnd ${value.hwnd}${value.reused ? ' (reused)' : ' (launched)'}`)
+    },
+  },
+
+  ensp_start: {
+    schema: obj({
+      allReady: req(bool()),
+      ready: req(num()),
+      total: req(num()),
+      anchors: req(str()),
+      devices: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (value.error) return text(value.error)
+      const head = `${value.ready}/${value.total} devices ready${value.allReady ? '' : ' (some did not answer)'}`
+      return text([head, value.anchors, '', value.devices].filter(Boolean).join('\n'))
+    },
+  },
+
+  ensp_stop: {
+    schema: obj({
+      ok: req(bool()),
+      anchors: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (value.error) return text(value.error)
+      return text(`shutdown requested for all devices\n${value.anchors}`)
+    },
+  },
+
+  ensp_apply: {
+    schema: obj({
+      ok: req(bool()),
+      applied: req(num()),
+      total: req(num()),
+      saved: req(bool()),
+      failedAt: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (value.error) return text(value.error)
+      if (value.ok) {
+        return text(`${args.device}: ${value.applied}/${value.total} commands applied${value.saved ? ', saved' : ''}`)
+      }
+      return text(`${args.device}: stopped after ${value.applied}/${value.total} commands\n${value.failedAt}`)
+    },
+  },
+
+  ensp_apply_dir: {
+    schema: obj({
+      configured: req(num()),
+      total: req(num()),
+      results: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (value.error) return text(value.error)
+      return text(`${value.configured}/${value.total} devices configured\n\n${value.results}`)
+    },
+  },
+
+  ensp_query: {
+    schema: obj({
+      ok: req(bool()),
+      output: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (!value.ok) return text(`${args.command} failed: ${value.error ?? 'unknown error'}`)
+      return text(value.output)
+    },
+  },
+
+  ensp_probe: {
+    schema: obj({
+      window: req(str()),
+      start: req(str()),
+      stop: req(str()),
+      method: req(str()),
+      clusters: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (value.error) return text(value.error)
+      return text(
+        `window ${value.window}\nanchors (${value.method}): start ${value.start}, stop ${value.stop}\n\n${value.clusters}`,
+      )
+    },
+  },
+
+  ensp_show: {
+    schema: obj({
+      found: req(bool()),
+      restored: req(bool()),
+      raised: req(bool()),
+      foreground: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (value.error) return text(value.error)
+      if (!value.found) return text('eNSP window not found.')
+      const lines = [
+        value.restored ? 'window restored from the taskbar' : 'window was not minimised',
+        value.raised ? 'window is in front' : 'window could not be raised; another window still holds the foreground',
+      ]
+      return text(lines.join('\n'))
+    },
+  },
+
+  ensp_scenarios: {
+    schema: obj({
+      count: req(num()),
+      list: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      return text(value.list || '(no scenario matched)')
+    },
+  },
+
+  ensp_scenario: {
+    schema: obj({
+      id: req(str()),
+      brief: req(str()),
+      curriculum: req(arr()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      return text(value.brief)
+    },
+  },
+
+  ensp_images: {
+    schema: obj({
+      ready: req(bool()),
+      models: req(str()),
+      installed: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (value.error) return text(value.error)
+      const head = value.installed ? `installed ${value.installed}\n\n` : ''
+      return text(head + value.models)
+    },
+  },
+
+  ensp_doctor: {
+    schema: obj({
+      ok: req(bool()),
+      failed: req(str()),
+      warned: req(str()),
+      skipped: req(str()),
+      checks: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (value.error) return text(value.error)
+      return text(value.checks + '\n\n' + (value.ok ? 'environment ok' : 'environment NOT ready'))
+    },
+  },
+
+  ensp_verify: {
+    schema: obj({
+      scenario: req(str()),
+      ok: req(bool()),
+      verified: req(bool()),
+      summary: req(str()),
+      detail: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (value.error) return text(value.error)
+      return text(`${value.scenario} · ${value.summary}\n\n${value.detail}`)
+    },
+  },
+
+  ensp_preset_config: {
+    schema: obj({
+      script: req(str()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      return text(value.script)
+    },
+  },
+
+  ensp_report: {
+    schema: obj({
+      path: req(str()),
+      bytes: req(num()),
+      scenario: req(str()),
+      title: req(str()),
+      verdict: req(str()),
+      devices: req(num()),
+      checks: req(num()),
+      error: req(str()),
+    }),
+    render(args, value) {
+      if (value.error) return text(value.error)
+      const kb = Math.max(1, Math.round(value.bytes / 1024))
+      return text(
+        `${value.scenario} · ${value.title}\n\n` +
+          `wrote ${value.path} (${kb} kB)\n` +
+          `${value.devices} devices, ${value.checks} checks\n` +
+          `${value.verdict}`,
+      )
+    },
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Execute half: returns the display-ready value the output schema describes
+// ---------------------------------------------------------------------------
+
+const EXEC = {
+  async ensp_status({ topology }) {
+    const pid = enspPid()
+    if (!pid) return { running: false }
+    const hwnd = locateWindow(pid)
+    let anchors = ''
+    if (hwnd) {
+      const a = calibrateAnchors(hwnd)
+      anchors = `toolbar anchors (${a.method}): start ${JSON.stringify(a.start)}, stop ${JSON.stringify(a.stop)}`
+    }
+    let devices = ''
+    if (topology) {
+      const topo = await readTopology(topology)
+      const rows = await Promise.all(
+        topo.devices
+          .filter((d) => d.comPort)
+          .map(async (d) => {
+            const r = await waitForConsole({ port: d.comPort, timeoutMs: 4000 })
+            return `${r.ready ? 'ready' : 'no answer'}  ${d.name}  :${d.comPort}  ${r.prompt ?? ''}`.trimEnd()
+          }),
+      )
+      devices = rows.join('\n')
+    }
+    return { running: true, pid, hwnd: hwnd ?? '', anchors, devices }
+  },
+
+  async ensp_build_topology(args) {
+    if (!args.path) throw new Error('path is required')
+    let topo
+    if (args.scenario) {
+      if (!hasLab(args.scenario)) {
+        throw new Error(
+          `scenario "${args.scenario}" has no topology blueprint; ${LAB_IDS.length} of ${SCENARIO_IDS.length} have one`,
+        )
+      }
+      topo = buildScenarioTopology(args.scenario)
+    } else if (args.preset === 'two-pc' || (!args.devices && !args.links)) {
+      topo = twoPcLab({ vlan: args.vlan ?? 10, subnet: args.subnet ?? '192.168.10' })
+    } else {
+      const b = buildTopology()
+      for (const d of args.devices ?? []) b.add(d.name, d.model, { x: d.x, y: d.y, pc: d.pc })
+      for (const l of args.links ?? []) b.link(l.a, l.aPort, l.b, l.bPort)
+      topo = autoLayout(b.finish())
+    }
+    const target = path.resolve(args.path)
+    await writeTopology(target, topo)
+    const info = summarise(topo)
+    const detail = args.scenario
+      ? '\n' + labDevices(args.scenario).join('\n')
+      : ''
+    const support = checkTopologySupport(topo)
+    const warning = support.ok
+      ? ''
+      : '\nWARNING: this machine cannot start ' +
+        support.blocked.map((b) => `${b.name} (${b.model}: ${b.reason})`).join(', ') +
+        ' -- eNSP will open the file and then quit'
+    return {
+      path: target,
+      devices: info.devices,
+      links: info.links,
+      consoles: JSON.stringify(info.consoles) + detail + warning,
+    }
+  },
+
+  async ensp_open({ topology }) {
+    if (!topology) throw new Error('topology is required')
+    const r = await launchEnsp({ topology: path.resolve(topology) })
+    return { pid: r.pid, hwnd: r.hwnd, reused: Boolean(r.reused) }
+  },
+
+  async ensp_start(args) {
+    if (!args.topology) throw new Error('topology is required')
+    const topo = await readTopology(path.resolve(args.topology))
+    const hwnd = args.hwnd ?? locateWindow(enspPid())
+    if (!hwnd) throw new Error('eNSP window not found; call ensp_open first')
+    const r = await startAllDevices({
+      devices: topo.devices,
+      hwnd,
+      perDeviceTimeoutMs: args.perDeviceTimeoutMs ?? 240000,
+      minimise: !args.keepWindow,
+    })
+    return {
+      allReady: r.allReady,
+      ready: r.ready,
+      total: r.total,
+      anchors: `toolbar anchors (${r.anchors?.method ?? 'default'}): ${JSON.stringify(r.anchors?.start ?? {})}`,
+      devices: r.devices
+        .map((d) => `${d.ready ? 'ready' : 'no answer'}  ${d.name}  :${d.port}  ${d.prompt ?? ''}`.trimEnd())
+        .join('\n'),
+    }
+  },
+
+  async ensp_stop(args = {}) {
+    const hwnd = args.hwnd ?? locateWindow(enspPid())
+    if (!hwnd) throw new Error('eNSP window not found')
+    const r = stopAllDevices(hwnd)
+    return { ok: r.ok, anchors: `anchors (${r.anchors?.method ?? 'default'}): ${JSON.stringify(r.anchors?.stop ?? {})}` }
+  },
+
+  async ensp_apply(args) {
+    if (!args.port) throw new Error('port is required')
+    const r = await pushConfig({
+      device: args.device ?? 'device',
+      port: args.port,
+      script: args.script ?? '',
+      save: Boolean(args.save),
+    })
+    return {
+      ok: r.ok,
+      applied: r.applied,
+      total: r.total,
+      saved: r.saved,
+      failedAt: r.failedAt
+        ? `line ${r.failedAt.line}: ${r.failedAt.command}\n  ${r.failedAt.error}\n  ${(r.failedAt.output ?? '').trim().split('\n').slice(-6).join('\n  ')}`
+        : '',
+    }
+  },
+
+  async ensp_apply_dir(args) {
+    if (!args.directory || !args.topology) throw new Error('directory and topology are required')
+    const topo = await readTopology(path.resolve(args.topology))
+    const consoles = new Map(topo.devices.filter((d) => d.comPort).map((d) => [d.name, d.comPort]))
+    const files = (await readdir(args.directory)).filter((f) => /\.(cfg|txt)$/i.test(f))
+    const targets = []
+    for (const file of files) {
+      const device = file.replace(/\.(cfg|txt)$/i, '')
+      const port = consoles.get(device)
+      if (!port) continue
+      targets.push({ device, port, script: await readFile(path.join(args.directory, file), 'utf8') })
+    }
+    const results = await pushConfigMany({
+      targets,
+      concurrency: args.concurrency ?? 3,
+      save: Boolean(args.save),
+    })
+    return {
+      configured: results.filter((r) => r.ok).length,
+      total: results.length,
+      results: results
+        .map((r) =>
+          r.ok
+            ? `ok    ${r.device}  ${r.applied}/${r.total}`
+            : `FAIL  ${r.device}  line ${r.failedAt?.line}: ${r.failedAt?.command} -> ${r.failedAt?.error}`,
+        )
+        .join('\n'),
+    }
+  },
+
+  async ensp_query(args) {
+    if (!args.port || !args.command) throw new Error('port and command are required')
+    const r = await queryDevice({ port: args.port, command: args.command })
+    return { ok: r.ok, output: r.output, error: r.error ?? '' }
+  },
+
+  async ensp_probe(args = {}) {
+    const hwnd = args.hwnd ?? locateWindow(enspPid())
+    if (!hwnd) throw new Error('eNSP window not found')
+    const r = inspectAnchors(hwnd)
+    const resolved = r.resolved ?? { start: {}, stop: {}, method: 'none' }
+    return {
+      window: r.window ?? '(unknown)',
+      start: JSON.stringify(resolved.start),
+      stop: JSON.stringify(resolved.stop),
+      method: resolved.method,
+      clusters: [
+        `green (${r.green.length}): ` + r.green.map((c) => `${c.x},${c.y} ${c.w}x${c.h}`).join(' | '),
+        `red   (${r.red.length}): ` + r.red.map((c) => `${c.x},${c.y} ${c.w}x${c.h}`).join(' | '),
+      ].join('\n'),
+    }
+  },
+
+  async ensp_show(args = {}) {
+    const hwnd = args.hwnd ?? locateWindow(enspPid())
+    if (!hwnd) throw new Error('eNSP window not found')
+    const r = showEnsp(hwnd)
+    return { ...r, foreground: r.foreground ?? '' }
+  },
+
+  async ensp_scenarios({ search, level, syllabus }) {
+    if (syllabus) {
+      const chapters = searchCurriculum(syllabus)
+      return {
+        count: chapters.length,
+        list: chapters
+          .map(
+            (c) =>
+              `${c.level} · ${c.title} (p${c.page})\n` +
+              (c.scenarios.length ? `  场景: ${c.scenarios.join(', ')}\n` : '') +
+              (c.verify.length ? `  验证: ${c.verify.slice(0, 4).join(' / ')}` : ''),
+          )
+          .join('\n'),
+      }
+    }
+    const groups = byLevel()
+    let ids = level && groups[level] ? groups[level] : Object.keys(SCENARIOS)
+    if (search) {
+      const matched = new Set(searchScenarios(search).map((h) => h.id))
+      ids = ids.filter((id) => matched.has(id))
+    }
+    return {
+      count: ids.length,
+      list: ids
+        .map((id) => `${id.padEnd(24)} ${SCENARIOS[id].title}  [${SCENARIOS[id].level}]`)
+        .join('\n'),
+    }
+  },
+
+  async ensp_scenario({ id }) {
+    if (!SCENARIOS[id]) throw new Error(`unknown scenario "${id}"`)
+    const brief = hasLab(id)
+      ? renderScenario(id) + `\n\n可生成拓扑: ensp_build_topology { path: "${id}.topo", scenario: "${id}" }`
+      : renderScenario(id)
+    return {
+      id,
+      brief:
+        brief +
+        (hasChecks(id)
+          ? `\n\n验收: ensp_verify { scenario: "${id}", topology: "${id}.topo" }`
+          : '\n\n验收: 无专门断言，ensp_verify 会逐条跑场景里的验证命令') +
+        renderCurriculum(id),
+      curriculum: curriculumFor(id).map((c) => ({
+        level: c.level,
+        title: c.title,
+        page: c.page,
+        verify: c.verify,
+      })),
+    }
+  },
+
+  async ensp_images({ model, source, overwrite }) {
+    if (source) {
+      if (!model) throw new Error('model is required when installing an image')
+      const result = installPluginMedia(model, path.resolve(source), { overwrite: overwrite === true })
+      const line = result.bytes
+        ? `${result.model} → ${result.target} (${result.bytes} bytes)`
+        : `${result.model} already has its image at ${result.target}`
+      return { ready: true, models: line, installed: result.bytes ? result.model : '', error: '' }
+    }
+    const models = model ? [model] : pluginModels()
+    const plans = models.map((name) => pluginMediaPlan(name))
+    const lines = plans.map((plan) => {
+      if (!plan.plugin) return `${plan.model}: not a plugin device in this installation`
+      if (plan.ready) {
+        const present = plan.media.find((item) => item.present)
+        return `${plan.model}: ready (${present.relative})`
+      }
+      return `${plan.model}: missing ${plan.target ?? 'no template'}`
+    })
+    return {
+      ready: plans.every((plan) => plan.ready),
+      models: lines.join('\n'),
+      installed: '',
+      error: '',
+    }
+  },
+
+  async ensp_doctor({ topology, deep }) {
+    let models
+    if (topology) models = modelsOf(await readTopology(path.resolve(topology)))
+    const report = doctor({ models, deep: deep !== false })
+    const lines = report.checks.map((c) => {
+      const tag = c.status === 'pass' ? '[ok  ]'
+        : c.status === 'warn' ? '[warn]'
+          : c.status === 'skip' ? '[skip]'
+            : '[FAIL]'
+      return `${tag} ${c.id}: ${c.detail}` + (c.fix ? `\n       fix: ${c.fix}` : '')
+    })
+    return {
+      ok: report.ok,
+      failed: report.failed.join(', ') || '(none)',
+      warned: report.warned.join(', ') || '(none)',
+      skipped: report.skipped.join(', ') || '(none)',
+      checks: lines.join('\n'),
+    }
+  },
+
+  async ensp_verify({ scenario, topology, timeout, wait }) {
+    if (!scenario) throw new Error('scenario is required')
+    if (!topology) throw new Error('topology is required: pass the .topo file that is running')
+    const report = await runAcceptance({
+      id: scenario,
+      topology: path.resolve(topology),
+      timeoutMs: timeout,
+      waitMs: wait,
+    })
+    const detail = report.results
+      .map((r) => {
+        const mark = r.pass === true ? 'PASS' : r.pass === null ? 'SKIP' : 'FAIL'
+        const waited = r.pass === true && r.waitedMs ? ` (converged after ${Math.round(r.waitedMs / 1000)}s)` : ''
+        return `${mark} ${r.device ?? '(no device)'} · ${r.id}${waited}: ${r.why}`
+      })
+      .join('\n')
+    return {
+      scenario: report.scenario,
+      ok: report.ok === true,
+      verified: report.ok !== null,
+      summary:
+        report.ok === null
+          ? `unverified: ${report.unverified}/${report.total} commands ran with no assertion (${report.source})`
+          : `${report.passed}/${report.total} checks passed (${report.source})`,
+      detail,
+    }
+  },
+
+  async ensp_preset_config({ vlan, scenario }) {
+    if (!scenario) return { script: twoPcLabConfig({ vlan: vlan ?? 10 }) }
+    if (!hasLabConfig(scenario)) {
+      throw new Error(`scenario "${scenario}" has no addressing plan; ${countLabConfigs()} of them have one`)
+    }
+    return { script: labConfigScript(scenario) }
+  },
+
+  async ensp_report({ scenario, topology, out, timeout, wait }) {
+    if (!scenario) throw new Error('scenario is required')
+    const result = await writeReport({ id: scenario, topology, out, timeoutMs: timeout, waitMs: wait })
+    const { verdict } = result.evidence
+    const verdictText =
+      verdict.ok === true
+        ? `passed: ${verdict.passed}/${verdict.total} checks`
+        : verdict.ok === false
+          ? `failed: ${verdict.failed}/${verdict.total} checks`
+          : `unverified: ${verdict.unverified}/${verdict.total} checks had no assertion`
+    return {
+      path: result.path,
+      bytes: result.bytes,
+      scenario: result.evidence.id,
+      title: result.evidence.title,
+      verdict: verdictText,
+      devices: result.evidence.devices.length,
+      checks: result.evidence.checks.length,
+    }
+  },
+}
+
 /**
  * Build the plugin.
  *
@@ -180,653 +783,17 @@ export function apply(ctx) {
     return
   }
 
-  /* ------------------------------------------------------------------ status */
-
-  add(tools, {
-    name: 'ensp_status',
-    description:
-      'Report eNSP state: whether the client is running, its window handle, and the calibrated toolbar anchors. '
-      + 'With a topology path, also polls every device console and reports which ones answer VRP.',
-    parameters: {
-      topology: str('Optional .topo path; when set, each console is probed (max 4s each).'),
-    },
-    output: {
-      schema: obj({
-        running: req(bool()),
-        pid: req(num()),
-        hwnd: req(str()),
-        anchors: req(str()),
-        devices: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        if (!value.running) return text('eNSP is not running.')
-        const lines = [`eNSP running, pid ${value.pid}, hwnd ${value.hwnd || '(no frame)'}`]
-        if (value.anchors) lines.push(value.anchors)
-        if (value.devices) lines.push('', value.devices)
-        if (value.error) lines.push('', value.error)
-        return text(lines.join('\n'))
-      },
-    },
-    async execute({ topology }) {
-      const pid = enspPid()
-      if (!pid) return { running: false }
-      const hwnd = locateWindow(pid)
-      let anchors = ''
-      if (hwnd) {
-        const a = calibrateAnchors(hwnd)
-        anchors = `toolbar anchors (${a.method}): start ${JSON.stringify(a.start)}, stop ${JSON.stringify(a.stop)}`
-      }
-      let devices = ''
-      if (topology) {
-        const topo = await readTopology(topology)
-        const rows = await Promise.all(
-          topo.devices
-            .filter((d) => d.comPort)
-            .map(async (d) => {
-              const r = await waitForConsole({ port: d.comPort, timeoutMs: 4000 })
-              return `${r.ready ? 'ready' : 'no answer'}  ${d.name}  :${d.comPort}  ${r.prompt ?? ''}`.trimEnd()
-            }),
-        )
-        devices = rows.join('\n')
-      }
-      return { running: true, pid, hwnd: hwnd ?? '', anchors, devices }
-    },
-  })
-
-  /* -------------------------------------------------------------- build topo */
-
-  add(tools, {
-    name: 'ensp_build_topology',
-    description:
-      'Generate a .topo file eNSP can open. Use preset "two-pc" for the built-in two-PC lab, '
-      + 'scenario for the topology behind a scenario id, or pass devices and links (links use VRP '
-      + 'interface names such as GigabitEthernet0/0/0).',
-    parameters: {
-      path: str('Output .topo path.'),
-      preset: str('"two-pc" for the built-in lab.'),
-      scenario: str('Scenario id with a topology blueprint, e.g. "ospf-single".'),
-      vlan: num('VLAN id for the two-pc preset (default 10).'),
-      devices: arr('Device list: [{ name, model, x, y }].'),
-      links: arr('Link list: [{ a, aPort, b, bPort }].'),
-    },
-    output: {
-      schema: obj({
-        path: req(str()),
-        devices: req(num()),
-        links: req(num()),
-        consoles: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        if (value.error) return text(value.error)
-        return text(
-          `wrote ${value.path}\n${value.devices} devices, ${value.links} links\nconsoles: ${value.consoles}`,
-        )
-      },
-    },
-    async execute(args) {
-      if (!args.path) throw new Error('path is required')
-      let topo
-      if (args.scenario) {
-        if (!hasLab(args.scenario)) {
-          throw new Error(
-            `scenario "${args.scenario}" has no topology blueprint; ${LAB_IDS.length} of ${SCENARIO_IDS.length} have one`,
-          )
-        }
-        topo = buildScenarioTopology(args.scenario)
-      } else if (args.preset === 'two-pc' || (!args.devices && !args.links)) {
-        topo = twoPcLab({ vlan: args.vlan ?? 10 })
-      } else {
-        const b = buildTopology()
-        for (const d of args.devices ?? []) b.add(d.name, d.model, { x: d.x, y: d.y, pc: d.pc })
-        for (const l of args.links ?? []) b.link(l.a, l.aPort, l.b, l.bPort)
-        topo = autoLayout(b.finish())
-      }
-      const target = path.resolve(args.path)
-      await writeTopology(target, topo)
-      const info = summarise(topo)
-      const detail = args.scenario
-        ? '\n' + labDevices(args.scenario).join('\n')
-        : ''
-      const support = checkTopologySupport(topo)
-      const warning = support.ok
-        ? ''
-        : '\nWARNING: this machine cannot start ' +
-          support.blocked.map((b) => `${b.name} (${b.model}: ${b.reason})`).join(', ') +
-          ' -- eNSP will open the file and then quit'
-      return {
-        path: target,
-        devices: info.devices,
-        links: info.links,
-        consoles: JSON.stringify(info.consoles) + detail + warning,
-      }
-    },
-  })
-
-  /* ------------------------------------------------------------------- open */
-
-  add(tools, {
-    name: 'ensp_open',
-    description: 'Launch the eNSP client (or reuse the running one) and open a topology file.',
-    parameters: { topology: str('Absolute path to a .topo file.') },
-    output: {
-      schema: obj({
-        pid: req(num()),
-        hwnd: req(str()),
-        reused: req(bool()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        return text(`eNSP pid ${value.pid}, hwnd ${value.hwnd}${value.reused ? ' (reused)' : ' (launched)'}`)
-      },
-    },
-    async execute({ topology }) {
-      if (!topology) throw new Error('topology is required')
-      const r = await launchEnsp({ topology: path.resolve(topology) })
-      return { pid: r.pid, hwnd: r.hwnd, reused: Boolean(r.reused) }
-    },
-  })
-
-  /* ------------------------------------------------------------------ start */
-
-  add(tools, {
-    name: 'ensp_start',
-    description:
-      'Boot every device in a topology. Calibrates the toolbar by colour, clicks start, then polls each '
-      + 'console until VRP answers, so readiness is measured per device rather than assumed. The window is '
-      + 'minimised afterwards unless keepWindow is true.',
-    parameters: {
-      topology: str('Absolute path to the .topo file that is currently open.'),
-      perDeviceTimeoutMs: num('Per-device readiness ceiling in ms (default 240000).'),
-      keepWindow: bool('Leave the eNSP window visible after starting.'),
-    },
-    output: {
-      schema: obj({
-        allReady: req(bool()),
-        ready: req(num()),
-        total: req(num()),
-        anchors: req(str()),
-        devices: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        if (value.error) return text(value.error)
-        const head = `${value.ready}/${value.total} devices ready${value.allReady ? '' : ' (some did not answer)'}`
-        return text([head, value.anchors, '', value.devices].filter(Boolean).join('\n'))
-      },
-    },
-    async execute(args) {
-      if (!args.topology) throw new Error('topology is required')
-      const topo = await readTopology(path.resolve(args.topology))
-      const hwnd = locateWindow(enspPid())
-      if (!hwnd) throw new Error('eNSP window not found; call ensp_open first')
-      const r = await startAllDevices({
-        devices: topo.devices,
-        hwnd,
-        perDeviceTimeoutMs: args.perDeviceTimeoutMs ?? 240000,
-        minimise: !args.keepWindow,
-      })
-      return {
-        allReady: r.allReady,
-        ready: r.ready,
-        total: r.total,
-        anchors: `toolbar anchors (${r.anchors?.method ?? 'default'}): ${JSON.stringify(r.anchors?.start ?? {})}`,
-        devices: r.devices
-          .map((d) => `${d.ready ? 'ready' : 'no answer'}  ${d.name}  :${d.port}  ${d.prompt ?? ''}`.trimEnd())
-          .join('\n'),
-      }
-    },
-  })
-
-  /* ------------------------------------------------------------------- stop */
-
-  add(tools, {
-    name: 'ensp_stop',
-    description: 'Shut down every device in the running topology.',
-    parameters: {},
-    output: {
-      schema: obj({
-        ok: req(bool()),
-        anchors: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        if (value.error) return text(value.error)
-        return text(`shutdown requested for all devices\n${value.anchors}`)
-      },
-    },
-    async execute() {
-      const hwnd = locateWindow(enspPid())
-      if (!hwnd) throw new Error('eNSP window not found')
-      const r = stopAllDevices(hwnd)
-      return { ok: r.ok, anchors: `anchors (${r.anchors?.method ?? 'default'}): ${JSON.stringify(r.anchors?.stop ?? {})}` }
-    },
-  })
-
-  /* ------------------------------------------------------------------ apply */
-
-  add(tools, {
-    name: 'ensp_apply',
-    description:
-      'Push a configuration script to one device, one command at a time. Each command is confirmed by its '
-      + 'prompt before the next is sent; the first error aborts the batch and reports the line, the command '
-      + 'and the raw device output.',
-    parameters: {
-      device: str('Device name, used in the report.'),
-      port: num('Console TCP port from the .topo file.'),
-      script: str('Configuration text; blank lines and ! / # comments are skipped.'),
-      save: bool('Run save at the end.'),
-    },
-    output: {
-      schema: obj({
-        ok: req(bool()),
-        applied: req(num()),
-        total: req(num()),
-        saved: req(bool()),
-        failedAt: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        if (value.error) return text(value.error)
-        if (value.ok) {
-          return text(`${args.device}: ${value.applied}/${value.total} commands applied${value.saved ? ', saved' : ''}`)
-        }
-        return text(`${args.device}: stopped after ${value.applied}/${value.total} commands\n${value.failedAt}`)
-      },
-    },
-    async execute(args) {
-      if (!args.port) throw new Error('port is required')
-      const r = await pushConfig({
-        device: args.device ?? 'device',
-        port: args.port,
-        script: args.script ?? '',
-        save: Boolean(args.save),
-      })
-      return {
-        ok: r.ok,
-        applied: r.applied,
-        total: r.total,
-        saved: r.saved,
-        failedAt: r.failedAt
-          ? `line ${r.failedAt.line}: ${r.failedAt.command}\n  ${r.failedAt.error}\n  ${(r.failedAt.output ?? '').trim().split('\n').slice(-6).join('\n  ')}`
-          : '',
-      }
-    },
-  })
-
-  /* -------------------------------------------------------------- apply dir */
-
-  add(tools, {
-    name: 'ensp_apply_dir',
-    description:
-      'Push one .cfg per device from a directory, matching file names to device names. Devices are '
-      + 'configured concurrently and one failure does not stop the others.',
-    parameters: {
-      directory: str('Directory containing <device>.cfg files.'),
-      topology: str('Topology that maps device names to console ports.'),
-      save: bool('Run save on each device afterwards.'),
-      concurrency: num('How many devices to configure at once (default 3).'),
-    },
-    output: {
-      schema: obj({
-        configured: req(num()),
-        total: req(num()),
-        results: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        if (value.error) return text(value.error)
-        return text(`${value.configured}/${value.total} devices configured\n\n${value.results}`)
-      },
-    },
-    async execute(args) {
-      if (!args.directory || !args.topology) throw new Error('directory and topology are required')
-      const topo = await readTopology(path.resolve(args.topology))
-      const consoles = new Map(topo.devices.filter((d) => d.comPort).map((d) => [d.name, d.comPort]))
-      const files = (await readdir(args.directory)).filter((f) => /\.(cfg|txt)$/i.test(f))
-      const targets = []
-      for (const file of files) {
-        const device = file.replace(/\.(cfg|txt)$/i, '')
-        const port = consoles.get(device)
-        if (!port) continue
-        targets.push({ device, port, script: await readFile(path.join(args.directory, file), 'utf8') })
-      }
-      const results = await pushConfigMany({
-        targets,
-        concurrency: args.concurrency ?? 3,
-        save: Boolean(args.save),
-      })
-      return {
-        configured: results.filter((r) => r.ok).length,
-        total: results.length,
-        results: results
-          .map((r) =>
-            r.ok
-              ? `ok    ${r.device}  ${r.applied}/${r.total}`
-              : `FAIL  ${r.device}  line ${r.failedAt?.line}: ${r.failedAt?.command} -> ${r.failedAt?.error}`,
-          )
-          .join('\n'),
-      }
-    },
-  })
-
-  /* ------------------------------------------------------------------ query */
-
-  add(tools, {
-    name: 'ensp_query',
-    description: 'Run one read-only command on a device console and return its output.',
-    parameters: {
-      port: num('Console TCP port.'),
-      command: str('One VRP command, e.g. "display ip routing-table".'),
-    },
-    output: {
-      schema: obj({
-        ok: req(bool()),
-        output: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        if (!value.ok) return text(`${args.command} failed: ${value.error ?? 'unknown error'}`)
-        return text(value.output)
-      },
-    },
-    async execute(args) {
-      if (!args.port || !args.command) throw new Error('port and command are required')
-      const r = await queryDevice({ port: args.port, command: args.command })
-      return { ok: r.ok, output: r.output, error: r.error ?? '' }
-    },
-  })
-
-  /* -------------------------------------------------------------- scenarios */
-
-  add(tools, {
-    name: 'ensp_scenarios',
-    description:
-      'List or search the ' + SCENARIO_IDS.length + ' built-in configuration scenarios. Each is a skeleton: what to create, in what '
-      + 'order, and the command that proves it worked, rather than a command dump.',
-    parameters: {
-      search: str('Keyword filter, e.g. "ospf" or "vlan".'),
-      level: str('One of basic, intermediate, advanced.'),
-    },
-    output: {
-      schema: obj({
-        count: req(num()),
-        list: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        return text(value.list || '(no scenario matched)')
-      },
-    },
-    async execute({ search, level }) {
-      const groups = byLevel()
-      let ids = level && groups[level] ? groups[level] : Object.keys(SCENARIOS)
-      if (search) {
-        const matched = new Set(searchScenarios(search).map((h) => h.id))
-        ids = ids.filter((id) => matched.has(id))
-      }
-      return {
-        count: ids.length,
-        list: ids
-          .map((id) => `${id.padEnd(24)} ${SCENARIOS[id].title}  [${SCENARIOS[id].level}]`)
-          .join('\n'),
-      }
-    },
-  })
-
-  add(tools, {
-    name: 'ensp_scenario',
-    description: 'Return one scenario as a step-by-step brief with verification commands and pitfalls.',
-    parameters: { id: str('Scenario id, e.g. "ospf-single".') },
-    output: {
-      schema: obj({
-        id: req(str()),
-        brief: req(str()),
-        curriculum: req(arr()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        return text(value.brief)
-      },
-    },
-    async execute({ id }) {
-      if (!SCENARIOS[id]) throw new Error(`unknown scenario "${id}"`)
-      const brief = hasLab(id)
-        ? renderScenario(id) + `\n\n可生成拓扑: ensp_build_topology { path: "${id}.topo", scenario: "${id}" }`
-        : renderScenario(id)
-      return {
-        id,
-        brief:
-          brief +
-          (hasChecks(id)
-            ? `\n\n验收: ensp_verify { scenario: "${id}", topology: "${id}.topo" }`
-            : '\n\n验收: 无专门断言，ensp_verify 会逐条跑场景里的验证命令') +
-          renderCurriculum(id) +
-          renderKnowledge(id),
-        curriculum: curriculumFor(id).map((c) => ({
-          level: c.level,
-          title: c.title,
-          page: c.page,
-          verify: c.verify,
-        })),
-      }
-    },
-  })
-
-  /* ---------------------------------------------------------- preset config */
-
-  add(tools, {
-    name: 'ensp_knowledge',
-    description:
-      'Look up two reference indexes. Pass scenario to list what one lab teaches, query to ' +
-      'search short term/answer notes, or syllabus to search the vendor manual chapter index ' +
-      '(chapter goals plus the display commands each chapter uses to prove its result).',
-    parameters: {
-      query: str('Keyword, e.g. "LSA" or "MED".'),
-      scenario: str('Scenario id, e.g. "ospf-lsa-types".'),
-      syllabus: str('Keyword to search the manual chapter index, e.g. "MPLS" or "BFD".'),
-    },
-    output: {
-      schema: obj({
-        scope: req(str()),
-        count: req(num()),
-        points: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        return text(value.points || '(no knowledge point matched)')
-      },
-    },
-    async execute({ query, scenario, syllabus }) {
-      if (syllabus) {
-        const chapters = searchCurriculum(syllabus)
-        return {
-          scope: `syllabus:${syllabus}`,
-          count: chapters.length,
-          points: chapters
-            .map(
-              (c) =>
-                `${c.level} · ${c.title} (p${c.page})\n` +
-                (c.scenarios.length ? `  场景: ${c.scenarios.join(', ')}\n` : '') +
-                (c.verify.length ? `  验证: ${c.verify.slice(0, 4).join(' / ')}` : ''),
-            )
-            .join('\n'),
-        }
-      }
-      if (scenario) {
-        if (!SCENARIOS[scenario]) throw new Error(`unknown scenario "${scenario}"`)
-        const points = knowledgeFor(scenario)
-        return {
-          scope: scenario,
-          count: points.length,
-          points: points.map((p) => `#${p.n} [${p.topic}] ${p.q}\n  答: ${p.a}`).join('\n'),
-        }
-      }
-      if (!query) throw new Error('pass query, scenario or syllabus')
-      const points = searchKnowledge(query)
-      return {
-        scope: String(query),
-        count: points.length,
-        points: points.map((p) => `#${p.n} [${p.topic}] ${p.q}\n  答: ${p.a}`).join('\n'),
-      }
-    },
-  })
-
-  add(tools, {
-    name: 'ensp_preset_config',
-    description: 'Return the configuration text for the built-in two-PC lab.',
-    parameters: { vlan: num('VLAN id (default 10).') },
-    output: {
-      schema: obj({
-        script: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        return text(value.script)
-      },
-    },
-    async execute({ vlan }) {
-      return { script: twoPcLabConfig({ vlan: vlan ?? 10 }) }
-    },
-  })
-
-  /* ------------------------------------------------------------------ probe */
-
-  add(tools, {
-    name: 'ensp_probe',
-    description:
-      'Re-measure the toolbar anchors and report every colour cluster. Run this after an eNSP upgrade or a '
-      + 'change of display scaling; results are cached per window size otherwise.',
-    parameters: {},
-    output: {
-      schema: obj({
-        window: req(str()),
-        start: req(str()),
-        stop: req(str()),
-        method: req(str()),
-        clusters: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        if (value.error) return text(value.error)
-        return text(
-          `window ${value.window}\nanchors (${value.method}): start ${value.start}, stop ${value.stop}\n\n${value.clusters}`,
-        )
-      },
-    },
-    async execute() {
-      const hwnd = locateWindow(enspPid())
-      if (!hwnd) throw new Error('eNSP window not found')
-      const r = inspectAnchors(hwnd)
-      const resolved = r.resolved ?? { start: {}, stop: {}, method: 'none' }
-      return {
-        window: r.window ?? '(unknown)',
-        start: JSON.stringify(resolved.start),
-        stop: JSON.stringify(resolved.stop),
-        method: resolved.method,
-        clusters: [
-          `green (${r.green.length}): ` + r.green.map((c) => `${c.x},${c.y} ${c.w}x${c.h}`).join(' | '),
-          `red   (${r.red.length}): ` + r.red.map((c) => `${c.x},${c.y} ${c.w}x${c.h}`).join(' | '),
-        ].join('\n'),
-      }
-    },
-  })
-
-  /* ----------------------------------------------------------------- doctor */
-
-  add(tools, {
-    name: 'ensp_doctor',
-    description:
-      'Check whether this machine can actually run a lab before starting anything: eNSP and '
-      + 'VirtualBox presence, missing device images, console ports already in use, free memory, and '
-      + 'whether synthetic mouse input reaches this session at all. Every failing check comes with a '
-      + 'fix. Never starts eNSP, so it is safe to run first.',
-    parameters: {
-      topology: str('optional .topo path, so the device images it needs can be checked'),
-      deep: bool('run the slow input-injection probe (default true)'),
-    },
-    output: {
-      schema: obj({
-        ok: req(bool()),
-        failed: req(str()),
-        warned: req(str()),
-        checks: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        if (value.error) return text(value.error)
-        return text(value.checks + '\n\n' + (value.ok ? 'environment ok' : 'environment NOT ready'))
-      },
-    },
-    async execute({ topology, deep }) {
-      let models
-      if (topology) models = modelsOf(await readTopology(path.resolve(topology)))
-      const report = doctor({ models, deep: deep !== false })
-      const lines = report.checks.map((c) => {
-        const tag = c.status === 'pass' ? '[ok  ]' : c.status === 'warn' ? '[warn]' : '[FAIL]'
-        return `${tag} ${c.id}: ${c.detail}` + (c.fix ? `\n       fix: ${c.fix}` : '')
-      })
-      return {
-        ok: report.ok,
-        failed: report.failed.join(', ') || '(none)',
-        warned: report.warned.join(', ') || '(none)',
-        checks: lines.join('\n'),
-      }
-    },
-  })
-
-  /* ----------------------------------------------------------------- verify */
-
-  add(tools, {
-    name: 'ensp_verify',
-    description:
-      'Run a scenario\'s acceptance checks against a lab that is already running. Curated scenarios '
-      + 'assert on what each device reports (OSPF Full, BGP Established, VRRP Master); the rest '
-      + 'smoke-test every verification command in the scenario. Use this to decide whether the lab '
-      + 'works, rather than whether configuration was merely sent.',
-    parameters: {
-      scenario: str('scenario id, e.g. "ospf-single"'),
-      topology: str('the .topo file that is running, used for console ports'),
-      timeout: num('per-command timeout in ms (default 25000)'),
-      wait: num('how long a failing assertion may keep being retried, in ms (default 60000)'),
-    },
-    output: {
-      schema: obj({
-        scenario: req(str()),
-        ok: req(bool()),
-        summary: req(str()),
-        detail: req(str()),
-        error: req(str()),
-      }),
-      render(args, value) {
-        if (value.error) return text(value.error)
-        return text(`${value.scenario} · ${value.summary}\n\n${value.detail}`)
-      },
-    },
-    async execute({ scenario, topology, timeout, wait }) {
-      if (!scenario) throw new Error('scenario is required')
-      if (!topology) throw new Error('topology is required: pass the .topo file that is running')
-      const report = await runAcceptance({
-        id: scenario,
-        topology: path.resolve(topology),
-        timeoutMs: timeout,
-        waitMs: wait,
-      })
-      const detail = report.results
-        .map((r) => {
-          const waited = r.pass && r.waitedMs ? ` (converged after ${Math.round(r.waitedMs / 1000)}s)` : ''
-          return `${r.pass ? 'PASS' : 'FAIL'} ${r.device} · ${r.id}${waited} — ${r.why}`
-        })
-        .join('\n')
-      return {
-        scenario: report.scenario,
-        ok: report.ok,
-        summary: `${report.passed}/${report.total} checks passed (${report.source})`,
-        detail,
-      }
-    },
-  })
+  for (const spec of TOOL_SPECS) {
+    add(tools, {
+      name: spec.name,
+      description: spec.description,
+      // A private copy per front end: `add()` and the schema helpers walk these
+      // nodes, so the two tables must never share one object graph.
+      parameters: structuredClone(spec.params),
+      output: OUTPUTS[spec.name],
+      execute: EXEC[spec.name],
+    })
+  }
 }
 
 /** Model metadata for the plugin row. */
@@ -835,3 +802,10 @@ export const dsh = {
   version: VERSION,
   description: 'Automate Huawei eNSP labs: build topology, boot devices, push config with verification.',
 }
+
+// The package root is the plugin entry, because that is what the Harness loads.
+// Library users reached for the same specifier and found none of the functions the
+// README shows, so the core surface is re-exported here as well. Nothing in
+// `core` collides with the plugin exports above, and `dsh-ensp/core` still works
+// for anyone who already imports it.
+export * from '../core/index.mjs'

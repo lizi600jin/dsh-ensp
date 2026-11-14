@@ -809,19 +809,19 @@ export const LABS = {
     ],
   ),
 
-  // eNSP's default AR2220 template declares only GE ports; a Serial card has to be
-  // added to the device by hand, and a blueprint cannot express that. VRP runs PPP
-  // and HDLC over GE just as well, so the two links below carry the encapsulations
-  // without a serial card: `link-protocol ppp` / `link-protocol hdlc` per interface.
+  // PPP and HDLC need real serial ports: an AR2220 rejects `link-protocol ppp` on a
+  // GE port with an empty error, so that path cannot be configured at all. The
+  // `Router` model carries four Serial ports out of the box, which is what this
+  // scenario is about, so both links ride Serial0/0/0 and Serial0/0/1.
   'ppp-hdlc': lab(
-    [['R1', 'AR2220'], ['R2', 'AR2220']],
-    [['R1', 'GigabitEthernet0/0/0', 'R2', 'GigabitEthernet0/0/0'],
-      ['R1', 'GigabitEthernet0/0/1', 'R2', 'GigabitEthernet0/0/1']],
+    [['R1', 'Router'], ['R2', 'Router']],
+    [['R1', 'Serial0/0/0', 'R2', 'Serial0/0/0'],
+      ['R1', 'Serial0/0/1', 'R2', 'Serial0/0/1']],
     [
-      { device: 'R1', port: 'GigabitEthernet0/0/0', ip: '10.0.12.1/30', note: 'link-protocol ppp + CHAP' },
-      { device: 'R2', port: 'GigabitEthernet0/0/0', ip: '10.0.12.2/30' },
-      { device: 'R1', port: 'GigabitEthernet0/0/1', ip: '10.0.13.1/30', note: 'link-protocol hdlc 对照' },
-      { device: 'R2', port: 'GigabitEthernet0/0/1', ip: '10.0.13.2/30' },
+      { device: 'R1', port: 'Serial0/0/0', ip: '10.0.12.1/30', note: 'link-protocol ppp + CHAP' },
+      { device: 'R2', port: 'Serial0/0/0', ip: '10.0.12.2/30' },
+      { device: 'R1', port: 'Serial0/0/1', ip: '10.0.13.1/30', note: 'link-protocol hdlc 对照' },
+      { device: 'R2', port: 'Serial0/0/1', ip: '10.0.13.2/30' },
     ],
   ),
 

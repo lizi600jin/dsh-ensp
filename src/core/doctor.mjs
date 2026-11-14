@@ -303,25 +303,30 @@ export function doctor(options = {}) {
       checks.push(check('anchors', 'warn', `not measured: ${error.message}`, 'Run `ensp probe` with eNSP visible.'))
     }
   } else {
+    // Nothing was measured, so there is nothing to report on. Comparing the two
+    // fallback constants with each other only proves they are ordered, which is
+    // true by construction and says nothing about this machine.
     const a = DEFAULT_ANCHORS.start
     const b = DEFAULT_ANCHORS.stop
     checks.push(
       check(
         'anchors',
-        b.x > a.x ? 'pass' : 'fail',
-        `fallback start (${a.x},${a.y}) stop (${b.x},${b.y}); eNSP not open, nothing measured`,
-        b.x > a.x ? undefined : 'Fallback anchors are inconsistent; run `ensp probe`.',
+        'skip',
+        `not measured: eNSP is not running; fallback is start (${a.x},${a.y}) stop (${b.x},${b.y})`,
+        'Open eNSP, load a topology and run `ensp doctor --topology <file>` to measure the toolbar.',
       ),
     )
   }
 
   const failed = checks.filter((c) => c.status === 'fail')
   const warned = checks.filter((c) => c.status === 'warn')
+  const skipped = checks.filter((c) => c.status === 'skip')
   return {
     ok: failed.length === 0,
     checks,
     failed: failed.map((c) => c.id),
     warned: warned.map((c) => c.id),
+    skipped: skipped.map((c) => c.id),
   }
 }
 
@@ -339,7 +344,7 @@ function safeWindow() {
 
 /** Render a doctor report for a terminal. */
 export function formatDoctor(report) {
-  const mark = { pass: 'ok  ', warn: 'warn', fail: 'FAIL' }
+  const mark = { pass: 'ok  ', warn: 'warn', fail: 'FAIL', skip: 'skip' }
   const lines = []
   for (const c of report.checks) {
     lines.push(`[${mark[c.status] || c.status}] ${c.id}: ${c.detail}`)
@@ -354,12 +359,6 @@ export function formatDoctor(report) {
   return lines.join('\n')
 }
 
-/** Convenience wrapper used by the CLI, MCP server and plugin. */
-export function checkEnvironment(options = {}) {
-  const report = doctor(options)
-  return { ...report, text: formatDoctor(report) }
-}
-
 /**
  * Models a topology needs, so `doctor()` can check the right images.
  * Accepts a parsed topology (from `readTopology`).
@@ -368,5 +367,3 @@ export function modelsOf(topology) {
   const devices = topology?.devices ?? []
   return [...new Set(devices.map((d) => d.model))].sort()
 }
-
-/** Free-memory constant, exported so tests can assert against it. */

@@ -504,6 +504,10 @@ export function openConsole({ port, host = '127.0.0.1', label, timeoutMs = 10000
 /**
  * Probe a console port without keeping a session.
  *
+ * Kept as the documented way to ask "is VRP answering on this port" for callers
+ * that need the prompt; `waitForConsole` in `launcher.mjs` is the polling form
+ * used while devices boot.
+ *
  * @param {{port: number, host?: string, timeoutMs?: number}} options
  * @returns {Promise<{port: number, reachable: boolean, prompt: string|null, error?: string}>}
  */

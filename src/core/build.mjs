@@ -38,6 +38,17 @@ import { serialiseTopology } from './topology.mjs'
 export { MODEL_SPECS, ICON, vrpToFlatIndex, flatIndexToVrp } from './models.mjs'
 
 /**
+ * True when a VRP port name belongs to the serial family.
+ *
+ * eNSP draws a serial line as `lineName="Serial"`. Wire a Serial port with the
+ * default Copper media and the topology renders, the console answers, but the
+ * line never comes up, so `link-protocol ppp` looks broken when it is not.
+ */
+function isSerialPort(port) {
+  return /^Serial/i.test(String(port ?? ''))
+}
+
+/**
  * `settings` blob eNSP writes for a simulated PC. Empty for every other model.
  * Without it eNSP still shows the PC but with no address, which breaks the
  * "ping between the two PCs" step.
@@ -127,7 +138,10 @@ export class TopologyBuilder {
       dstId: b.id,
       srcIndex: ai,
       dstIndex: bi,
-      media: options.media ?? 'Copper',
+      // A Serial port drawn as a Copper cable makes eNSP render the link and never
+      // bring the line up, so the media follows the port family unless the caller
+      // overrides it. Serial links carry `lineName="Serial"` in the file.
+      media: options.media ?? (isSerialPort(aPort) || isSerialPort(bPort) ? 'Serial' : 'Copper'),
     })
     return this
   }

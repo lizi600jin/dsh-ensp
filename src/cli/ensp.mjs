@@ -16,7 +16,7 @@
  * @module dsh-ensp/cli
  */
 
-import { readFile, access } from 'node:fs/promises'
+import { readFile, access, mkdir, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
@@ -28,14 +28,15 @@ import {
   startAllDevices,
   stopAllDevices,
   launchEnsp,
+  showEnsp,
   waitForConsole,
 } from '../core/launcher.mjs'
 import { calibrateAnchors, inspectAnchors, DEFAULT_ANCHORS } from '../core/calibrate.mjs'
 import { doctor, formatDoctor, modelsOf } from '../core/doctor.mjs'
 import { runAcceptance, formatAcceptance, hasChecks, planFor } from '../core/acceptance.mjs'
 import { pushConfig } from '../core/provision.mjs'
+import { writeReport } from '../core/report.mjs'
 import { SCENARIOS, SCENARIO_IDS, byLevel, renderScenario, searchScenarios } from '../core/presets.mjs'
-import { knowledgeFor, renderKnowledge, searchKnowledge } from '../core/knowledge.mjs'
 import { curriculumFor, renderCurriculum, searchCurriculum } from '../core/curriculum.mjs'
 import {
   LAB_IDS,
@@ -44,7 +45,8 @@ import {
   labAddressing,
   labDevices,
 } from '../core/labs.mjs'
-import { checkTopologySupport } from '../core/compat.mjs'
+import { countLabConfigs, hasLabConfig, labConfigScript, labConfigs } from '../core/labconfig.mjs'
+import { checkTopologySupport, pluginMediaPlan, pluginModels, installPluginMedia } from '../core/compat.mjs'
 import { writeTopology } from '../core/topology.mjs'
 
 const C = {
@@ -64,9 +66,12 @@ ${C.bold('USAGE')}
   ensp status  [--topology <topology.topo>]
   ensp doctor  [--topology <topology.topo>] [--json] [--shallow]
   ensp verify  <scenario-id> --topology <topology.topo> [--json] [--wait MS]
+  ensp report  <scenario-id> [--topology <topology.topo>] [--out <file.docx>] [--json]
   ensp probe   [--json]
+  ensp show    [--json]         (bring the eNSP window back to the front)
+  ensp images  [--json] [<model>] [--install <image>]
   ensp stop    [--topology <topology.topo>]
-  ensp preset  [<id>] [--search <keyword>] [--syllabus <keyword>] [--topo <out.topo>] [--json]
+  ensp preset  [<id>] [--search <keyword>] [--syllabus <keyword>] [--topo <out.topo>] [--config] [--json]
   ensp mcp     (start the MCP server on stdio)
 
 ${C.bold('OPTIONS')}
@@ -76,8 +81,10 @@ ${C.bold('OPTIONS')}
   --device NAME     apply only to one device
   --timeout MS      per-device readiness timeout (default 240000)
   --wait MS         verify: how long a failing assertion may keep being retried (default 60000)
+  --out PATH        report: where to write the .docx (default <scenario>-report.docx)
+  --install PATH    images: put this device image where this machine's eNSP looks for it
   --syllabus KW     search the vendor manual chapter index (goals and verification commands)
-  --knowledge KW    search the term index (short answers filed by topic)
+  --config [DIR]    print the scenario's addressing plan as commands, or write one .cfg per device into DIR
   --topo PATH       write the scenario's topology blueprint to a .topo file
   --topology PATH   the .topo file that is running (doctor, verify)
   --exe PATH        full path to eNSP_Client.exe (default: auto-detect via registry and install roots)
@@ -90,10 +97,14 @@ ${C.bold('EXAMPLES')}
   ensp up lab.topo
   ensp doctor --topology lab.topo
   ensp verify ospf-single --topology lab.topo
+  ensp report ospf-single --topology lab.topo --out ospf-single.docx
   ensp apply ./configs --topology lab.topo --save
   ensp status --topology lab.topo
   ensp up lab.topo --exe "C:/Program Files/Huawei/eNSP/eNSP_Client.exe"
   ensp probe
+  ensp show
+  ensp images
+  ensp images USG6000V --install D:/downloads/vfw_usg.vdi
   ensp preset --search ospf
   ensp preset --syllabus "MPLS"
   ensp preset ospf-single
@@ -343,23 +354,6 @@ async function cmdPreset({ positional, flags }) {
     return 0
   }
 
-  if (flags.knowledge) {
-    const hits = searchKnowledge(String(flags.knowledge))
-    if (flags.json) {
-      console.log(JSON.stringify(hits, null, 2))
-      return hits.length ? 0 : 1
-    }
-    if (!hits.length) {
-      console.log(C.yellow('no knowledge point matched') + ` "${flags.knowledge}"`)
-      return 1
-    }
-    for (const h of hits) {
-      console.log(`${C.bold('#' + h.n)} ${C.dim('[' + h.topic + ']')} ${h.q}`)
-      console.log(`   答: ${h.a}`)
-    }
-    return 0
-  }
-
   if (flags.search) {
     const hits = searchScenarios(String(flags.search))
     if (flags.json) {
@@ -398,6 +392,50 @@ async function cmdPreset({ positional, flags }) {
   }
 
   try {
+    if (flags.config) {
+      if (!hasLabConfig(id)) {
+        console.error(
+          C.red('error:') +
+            ` scenario "${id}" has no addressing plan to turn into a script; ${countLabConfigs()} of ${SCENARIO_IDS.length} have one`,
+        )
+        return 2
+      }
+      const script = labConfigScript(id)
+      if (flags.config !== true) {
+        // A path was given, so write the one-file-per-device directory that
+        // `ensp apply` reads instead of printing a script the reader has to
+        // split by hand.
+        const dir = path.resolve(String(flags.config))
+        await mkdir(dir, { recursive: true })
+        const written = []
+        for (const entry of labConfigs(id)) {
+          const file = path.join(dir, entry.device + '.cfg')
+          await writeFile(file, entry.script + '\n', 'utf8')
+          written.push(file)
+        }
+        if (flags.json) {
+          console.log(JSON.stringify({ scenario: id, directory: dir, files: written }, null, 2))
+          return 0
+        }
+        for (const file of written) console.log(`${C.green('wrote')} ${file}`)
+        console.log(
+          C.dim(`\n# 只有地址规划 · 路由与策略仍按步骤自己配\n# 下一步: ensp apply ${dir} --topology <lab.topo>`),
+        )
+        return 0
+      }
+      if (flags.json) {
+        console.log(JSON.stringify({ scenario: id, script }, null, 2))
+        return 0
+      }
+      console.log(script)
+      console.log(
+        C.dim(
+          `\n# 只覆盖地址规划，路由与策略仍按步骤自己配 · 给 --config 一个目录即可写成每台设备一个 .cfg`,
+        ),
+      )
+      return 0
+    }
+
     if (flags.topo) {
       if (!hasLab(id)) {
         console.error(
@@ -432,7 +470,6 @@ async function cmdPreset({ positional, flags }) {
     }
 
     const text = renderScenario(id)
-    const points = knowledgeFor(id)
     const chapters = curriculumFor(id).map((c) => ({
       level: c.level,
       title: c.title,
@@ -441,15 +478,16 @@ async function cmdPreset({ positional, flags }) {
     }))
     console.log(
       flags.json
-        ? JSON.stringify({ ...SCENARIOS[id], knowledge: points, curriculum: chapters }, null, 2)
+        ? JSON.stringify({ ...SCENARIOS[id], curriculum: chapters }, null, 2)
         : text,
     )
     const taught = renderCurriculum(id)
     if (taught) console.log(taught)
-    const knowledge = renderKnowledge(id)
-    if (knowledge) console.log(knowledge)
     if (hasLab(id)) {
       console.log(C.dim(`\n可生成拓扑: ensp preset ${id} --topo ${id}.topo`))
+    }
+    if (hasLabConfig(id)) {
+      console.log(C.dim(`地址规划: ensp preset ${id} --config`))
     }
     return 0
   } catch (error) {
@@ -498,12 +536,130 @@ async function cmdProbe({ flags }) {
 }
 
 /**
+ * `ensp show` (alias `ensp front`)
+ *
+ * Bring eNSP back out of the taskbar and in front, so the lab can be watched while
+ * it is being configured. Booting minimises the window on purpose, which is fine
+ * until someone wants to look at it.
+ */
+async function cmdShow({ flags }) {
+  const pid = enspPid()
+  if (!pid) {
+    console.error(C.red('error:') + ' eNSP is not running')
+    return 1
+  }
+  const hwnd = locateWindow(pid)
+  if (!hwnd) {
+    console.error(C.red('error:') + ' eNSP window not found')
+    return 1
+  }
+  const r = showEnsp(hwnd)
+  if (flags.json) {
+    console.log(JSON.stringify({ pid, hwnd, ...r }, null, 2))
+    return r.raised ? 0 : 1
+  }
+  console.log(`${C.bold('window')} ${hwnd} (pid ${pid})`)
+  console.log(r.restored ? `${C.green('restored')} from the taskbar` : C.dim('was not minimised'))
+  if (r.raised) {
+    console.log(`${C.green('in front')}`)
+    return 0
+  }
+  console.error(
+    C.yellow('warning:') +
+      ' the window was restored but another window still holds the foreground. Windows does not let another ' +
+      'process raise a foreign window, so click the taskbar button once.',
+  )
+  return 1
+}
+
+/**
  * `ensp doctor [--topology t.topo] [--json] [--shallow]`
  *
  * Answers "why did nothing happen?" before a lab starts. Every failing check
  * carries its own fix, because the failure modes here (missing image, covered
  * window, dead input queue) all look the same from the outside.
  */
+/**
+ * Report which plugin device images this installation has, and install one.
+ *
+ * The destination is never guessed here: `pluginMediaPlan` reads it out of the
+ * model's own VirtualBox template, so the same command works on a machine that
+ * installed eNSP somewhere else.
+ */
+async function cmdImages({ positional, flags }) {
+  const model = positional[0]
+
+  if (flags.install) {
+    if (!model) {
+      console.error(C.red('error:') + ' usage: ensp images <model> --install <image-file>')
+      return 2
+    }
+    const source = path.resolve(String(flags.install))
+    if (!(await exists(source))) {
+      console.error(C.red('error:') + ` no such file: ${source}`)
+      return 2
+    }
+    let result
+    try {
+      result = installPluginMedia(model, source, { overwrite: Boolean(flags.overwrite) })
+    } catch (error) {
+      console.error(C.red('error:') + ' ' + error.message)
+      return 1
+    }
+    if (flags.json) {
+      console.log(JSON.stringify(result, null, 2))
+      return 0
+    }
+    if (!result.bytes) {
+      console.log(`${C.bold(model)} already has its image at ${result.target}`)
+      console.log(C.dim('pass --overwrite to replace it'))
+      return 0
+    }
+    console.log(`${C.green('installed')} ${model} → ${result.target} (${result.bytes} bytes)`)
+    if (result.iniUpdated) console.log(C.dim('ImgFile updated in the plugin system.ini'))
+    console.log(C.dim('restart eNSP if it is open, then run ensp doctor --topology <file>'))
+    return 0
+  }
+
+  const models = model ? [model] : pluginModels()
+  if (!models.length) {
+    console.error(C.red('error:') + ' this eNSP installation declares no plugin devices')
+    return 1
+  }
+  const plans = models.map((name) => pluginMediaPlan(name))
+
+  if (flags.json) {
+    console.log(JSON.stringify(plans, null, 2))
+    return plans.every((p) => p.ready) ? 0 : 1
+  }
+
+  for (const plan of plans) {
+    if (!plan.plugin) {
+      console.log(`${C.bold(plan.model)} ${C.dim('not a plugin device in this installation')}`)
+      continue
+    }
+    if (plan.ready) {
+      console.log(`${C.green('ready')} ${plan.model} ${C.dim(plan.media.find((m) => m.present).relative)}`)
+      continue
+    }
+    console.log(`${C.yellow('missing')} ${plan.model} ${C.dim(plan.target ?? 'no template')}`)
+  }
+
+  const missing = plans.filter((p) => p.plugin && !p.ready)
+  if (missing.length) {
+    console.log(
+      '\n' +
+        C.dim(
+          'Install one with: ensp images <model> --install <image-file>\n' +
+            'Or reinstall eNSP and tick the device component. eNSP opens a topology that ' +
+            'uses these models, renders it, then quits by itself.',
+        ),
+    )
+  }
+  return missing.length ? 1 : 0
+}
+
+/** `ensp doctor [--topology t.topo] [--json] [--shallow]` */
 async function cmdDoctor({ positional, flags }) {
   let models
   if (flags.topology || positional[0]) {
@@ -527,6 +683,20 @@ async function cmdDoctor({ positional, flags }) {
   }
   console.log(formatDoctor(report))
   return report.ok ? 0 : 1
+}
+
+/**
+ * Exit code for an acceptance report.
+ *
+ * 0 means the checks that carry an assertion all passed and at least one of them
+ * existed. 1 means something contradicted the expected state. 3 means the lab was
+ * reachable but nothing was asserted against it, so the run proved only that the
+ * commands were accepted.
+ */
+function exitCodeFor(report) {
+  if (report.ok === true) return 0
+  if (report.ok === false) return 1
+  return 3
 }
 
 /**
@@ -567,10 +737,57 @@ async function cmdVerify({ positional, flags }) {
   })
   if (flags.json) {
     console.log(JSON.stringify(report, null, 2))
-    return report.ok ? 0 : 1
+    return exitCodeFor(report)
   }
   console.log(formatAcceptance(report))
-  return report.ok ? 0 : 1
+  return exitCodeFor(report)
+}
+
+async function cmdReport({ positional, flags }) {
+  const id = positional[0]
+  if (!id) {
+    console.error(C.red('error:') + ' usage: ensp report <scenario-id> [--topology <topology.topo>] [--out <file.docx>]')
+    return 2
+  }
+  if (!SCENARIOS[id]) {
+    console.error(C.red('error:') + ` unknown scenario "${id}"`)
+    return 2
+  }
+  const out = flags.out ? String(flags.out) : undefined
+  if (!flags.json) {
+    console.log(C.dim(`collecting evidence for ${id}${flags.topology ? ` from ${flags.topology}` : ' (blueprint ports)'}`))
+  }
+  const result = await writeReport({
+    id,
+    topology: flags.topology ? String(flags.topology) : undefined,
+    out,
+    timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
+    waitMs: flags.wait ? Number(flags.wait) : undefined,
+    onProgress: flags.json
+      ? undefined
+      : (e) => {
+          if (e.phase === 'check') process.stderr.write(C.dim(`  checking ${e.id} on ${e.device}\n`))
+          else if (e.phase === 'retry')
+            process.stderr.write(C.dim(`  waiting ${Math.round(e.waited / 1000)}s for ${e.id} on ${e.device}\n`))
+        },
+  })
+  const { verdict } = result.evidence
+  if (flags.json) {
+    console.log(
+      JSON.stringify(
+        { path: result.path, bytes: result.bytes, scenario: result.evidence.id, verdict },
+        null,
+        2,
+      ),
+    )
+  } else {
+    console.log(`wrote ${result.path} (${result.bytes} bytes)`)
+    console.log(
+      `verdict: ${verdict.ok === true ? 'passed' : verdict.ok === false ? 'failed' : 'unverified'} ` +
+        `(${verdict.passed} passed, ${verdict.failed} failed, ${verdict.unverified} unverified of ${verdict.total})`,
+    )
+  }
+  return verdict.ok === false ? 1 : 0
 }
 
 // ------------------------------------------------------------------------- main
@@ -598,8 +815,15 @@ async function main() {
       return cmdDoctor({ positional, flags })
     case 'verify':
       return cmdVerify({ positional, flags })
+    case 'report':
+      return cmdReport({ positional, flags })
     case 'stop':
       return cmdUp({ positional, flags: { ...flags, stop: true } })
+    case 'show':
+    case 'front':
+      return cmdShow({ flags })
+    case 'images':
+      return cmdImages({ positional, flags })
     case 'preset':
       return cmdPreset({ positional, flags })
     case 'mcp':

@@ -17,7 +17,6 @@ export {
   portCount,
   describePorts,
   portsFromDeclarations,
-  declarationsFor,
 } from './models.mjs'
 
 // Kept for consumers written against the old shape; the table behind it was
@@ -53,18 +52,27 @@ export {
 } from './labs.mjs'
 
 export {
+  labConfigs,
+  labConfigScript,
+  hasLabConfig,
+  countLabConfigs,
+  maskFromPrefix,
+  addressCommand,
+} from './labconfig.mjs'
+
+export {
   probeDevice,
   checkTopologySupport,
   describeBlocked,
   imageNotesFor,
   IMAGE_NOTES,
   rootFromExe,
+  pluginMediaFiles,
 } from './compat.mjs'
 
 export {
   doctor,
   formatDoctor,
-  checkEnvironment,
   probeInputInjection,
   freeMemoryMb,
   busyConsolePorts,
@@ -90,12 +98,15 @@ export {
   locateWindow,
   launchEnsp,
   focusEnsp,
+  showEnsp,
   minimiseEnsp,
   clickToolbar,
   checkOcclusion,
   waitForConsole,
   startAllDevices,
   stopAllDevices,
+  topologyRendered,
+  canvasDeviceCount,
 } from './launcher.mjs'
 
 export {
@@ -124,13 +135,6 @@ export {
 } from './presets.mjs'
 
 export {
-  knowledgeTopics,
-  knowledgeFor,
-  searchKnowledge,
-  renderKnowledge,
-} from './knowledge.mjs'
-
-export {
   curriculumLevels,
   curriculumChapters,
   curriculumFor,
@@ -146,3 +150,18 @@ export {
   enspCandidates,
   vboxCandidates,
 } from './paths.mjs'
+
+export {
+  buildDocx,
+  documentXml,
+  renderBlocks,
+  inlineRuns,
+  escapeXml,
+  zip,
+} from './docx.mjs'
+
+export {
+  collectEvidence,
+  buildReportBlocks,
+  writeReport,
+} from './report.mjs'

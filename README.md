@@ -58,8 +58,11 @@ const topo = autoLayout(
 ```bash
 ensp probe          # 重新标定按钮位置
 ensp up lab.topo    # 打开、启动、确认就绪、最小化
+ensp show           # 随时把窗口唤回前台
 ensp stop           # 关闭全部设备
 ```
+
+启动和下发配置期间窗口保持最小化，不抢前台。想看设备状态或手工改动时用 `ensp show` 唤回，改完再把它最小化即可，配置流程不受影响。这个命令只还原窗口并尝试置前，不触碰拓扑与设备状态。
 
 eNSP 只允许运行一个实例。异常退出可能遗留不占线程的僵尸进程，该进程持续持有单实例锁，导致下一次启动只打开空白窗口。工具在启动前会识别并清理此类进程。
 
@@ -118,25 +121,24 @@ ensp preset campus-network --topo campus.topo   # 生成该场景的拓扑
 
 每个场景提供三项信息：需要创建的对象、配置顺序、用于确认结果的检查命令。具体命令由使用者按设备补全。
 
-场景自带拓扑蓝图：设备、链路、地址规划均为现成内容，加 `--topo` 即生成 eNSP 可打开的 `.topo`，无需先绘图再规划地址。蓝图不含配置命令，场景仍为骨架。
+场景自带拓扑蓝图：设备、链路、地址规划均为现成内容，加 `--topo` 即生成 eNSP 可打开的 `.topo`，无需先绘图再规划地址。
 
 ```bash
 ensp preset ospf-single --topo ospf-single.topo
 ensp up ospf-single.topo
 ```
 
-场景清单与蓝图均可生成、可校验。`docs/SCENARIOS.md` 由 `src/core/presets.mjs` 与 `src/core/labs.mjs` 渲染，`npm run docs:check` 在两者不一致时返回非零，CI 亦执行该检查。
-
-### 知识点
-
-场景说明只给方向，命令由使用者补全，因此需要知道该场景涉及的术语。`src/core/knowledge.json` 收录按主题归类的知识点：每个场景在末尾附上同主题的若干「问题 + 答案」，涵盖 LSA 类型归属、BGP 选路属性、MSTP 端口角色等。
+地址规划也能直接变成命令。加 `--config` 输出该场景每台设备的接口与地址配置，范围仅限地址规划：路由协议、ACL、VRRP 这些仍是练习本身，场景不会代你写好。
 
 ```bash
-ensp preset ospf-lsa-types          # 详情末尾带知识点小节
-ensp preset --knowledge LSA         # 按关键词检索知识点
+ensp preset ospf-single --config                 # 按设备分段打印
+ensp preset ospf-single --config ./configs       # 写成每台设备一个 .cfg，可直接交给 ensp apply
+ensp preset ospf-single --config --json          # 打印模式下的同一份内容，便于脚本处理
 ```
 
-知识点按主题人工归类：每条是一句可核对的事实，而不是照搬原始条目。索引只保留题干与正确选项文本，原始资料不随包分发。
+50 个蓝图里 45 个带地址规划，五个二层场景（`vlan-access`、`trunk-interconnect`、`link-aggregation`、`port-security`、`port-isolation`）只有 VLAN 与端口，没有地址可配，`--config` 对它们报错而不是输出空脚本。
+
+场景清单与蓝图均可生成、可校验。`docs/SCENARIOS.md` 由 `src/core/presets.mjs` 与 `src/core/labs.mjs` 渲染，`npm run docs:check` 在两者不一致时返回非零，CI 亦执行该检查。
 
 ### 教材章节索引
 
@@ -174,6 +176,26 @@ This is not a bug in the topology: eNSP opens it, renders it, then quits. ...
 
 `ensp preset ... --topo` 生成文件时给出同样的提示，`ensp_build_topology` 的返回值包含 `unsupportedDevices`。该检查只读取本机文件，不启动 eNSP。各场景的设备清单见 [docs/SCENARIOS.md](docs/SCENARIOS.md) 中的“设备镜像”一行。
 
+镜像放在哪，由各机型的 VirtualBox 模板决定，不是一个固定位置。`ensp images` 逐个机型读出模板里的磁盘路径，再检查文件在不在：
+
+```console
+$ ensp images
+USG6000V: missing E:\Huawei\eNSP\plugin\ngfw\DataBase\vfw_usg.vdi
+NE40E: missing E:\Huawei\eNSP\plugin\ne\Database\NE40E.img
+...
+```
+
+拿到镜像文件后，用一条命令放到这台机器该放的位置，同时把插件的 `system.ini` 指向它：
+
+```console
+$ ensp images USG6000V --install D:/downloads/vfw_usg.vdi
+installed USG6000V → E:\Huawei\eNSP\plugin\ngfw\DataBase\vfw_usg.vdi (1429741568 bytes)
+ImgFile updated in the plugin system.ini
+restart eNSP if it is already running
+```
+
+目标路径从模板解析，换一台机器装在不同目录也照样正确。镜像不随包分发、也不会自动下载，来源是你手上已有的文件。只做检查不动文件时退出码为 1，方便写在启动脚本前面。
+
 ### 窗口遮挡检查
 
 启动设备需要点击 eNSP 工具栏按钮，而合成点击由持有该像素的窗口接收。其他程序覆盖 eNSP 时，鼠标事件被该程序接收，eNSP 收不到任何输入。
@@ -207,8 +229,8 @@ eNSP 客户端要求管理员权限，始终以高完整性级别运行。Window
 
 ```console
 $ ensp doctor --topology lab.topo
-[ok  ] ensp-installed: E:\Huawei\eNSP\eNSP_Client.exe
-[ok  ] virtualbox: E:\VirtualBox\VBoxManage.exe
+[ok  ] ensp-installed: C:\Program Files\Huawei\eNSP\eNSP_Client.exe
+[ok  ] virtualbox: C:\Program Files\Oracle\VirtualBox\VBoxManage.exe
 [ok  ] console-ports: 2000-2100 free
 [warn] memory: 949 MB free (each router needs ~256 MB)
        fix: Close some applications; devices may boot very slowly or fail to start.
@@ -236,9 +258,26 @@ ospf-single · 单区域 OSPF
 accepted: 2/2 checks passed
 ```
 
-约 30 个场景配置了针对性断言（OSPF 需 `Full`、BGP 需 `Established`、VRRP 需 `Master`/`Backup`、MPLS VPN 需 `Established` 与 VPN 路由表），其余场景回退为执行场景内列出的验证命令。判定逻辑位于 `src/core/acceptance.mjs` 的 `EXPECTATIONS`，断言支持 `contains`、`notContains`、`matches`、`minLines`。对应工具为 `ensp_verify`，`ensp_scenario` 会标明某场景是否具有针对性断言。
+约 48 个场景配置了针对性断言（OSPF 需 `Full`、BGP 需 `Established`、VRRP 需 `Master`/`Backup`、MPLS VPN 需 `Established` 与 VPN 路由表）。这些场景的报告标 `[curated checks]`，每条检查都按输出内容判定。判定逻辑位于 `src/core/acceptance.mjs` 的 `EXPECTATIONS`，断言支持 `contains`、`notContains`、`matches`、`minLines`。对应工具为 `ensp_verify`，`ensp_scenario` 会标明某场景是否具有针对性断言。
 
-断言中的设备名按角色映射到实际拓扑：蓝图使用 `R1`/`R2`，课程作业可能使用 `RA`/`RB`/`RC`，校验时取第一台具备控制台的设备（`R2` 取第二台），名称不同不影响判定。
+其余 2 个场景没有断言，只执行场景内列出的验证命令。报告把这类检查标为 `[skip]`，结尾写 `unverified`，退出码为 3，不会计为通过：
+
+```console
+$ ensp verify firewall-hrp --topology lab.topo
+firewall-hrp · 防火墙双机热备（HRP）
+[smoke checks]
+[skip] smoke-1 on FW1: display hrp state
+         no assertion: this command only had to run
+[skip] smoke-2 on FW1: display vrrp
+         no assertion: this command only had to run
+[skip] smoke-3 on FW1: display session table
+         no assertion: this command only had to run
+
+unverified: 3/3 checks had no assertion, 0 passed. Nothing contradicted the expected state, but no output was checked either.
+```
+
+断言中的设备名按设备族匹配到实际拓扑：蓝图使用 `R1`/`R2`，课程作业可能使用 `RA`/`RB`/`RC`，校验时取同一前缀族里的第 N 台（`R2` 取第二个 `R*`）。族里没有这个名字时报 `no console port for device "..."`，不会静默换成另一台设备。
+
 
 断言不通过时会自动重试。路由协议在命令返回之后才收敛，`ensp apply` 结束后立即验收时，OSPF 邻居通常仍处于 `ExStart` 或 `2-Way`，单次采样会误判为失败。默认等待 60 秒，可通过 `--wait` 调整，通过时注明确切等待时长：
 
@@ -253,6 +292,36 @@ $ ensp verify ospf-single --topology lab.topo
 以下两类失败不进入重试循环，重试不会改变结果：控制台不可达（设备未启动）与 VRP 拒绝命令（命令有误）。前者报告 `console unreachable: ... ECONNREFUSED`，后者报告 `VRP rejected the command`，均不伪装为断言不符。
 
 推荐顺序为 `doctor`、`up`、`verify`：doctor 判定环境，up 判定设备，verify 判定配置效果。
+
+### 实验报告
+
+实验做完需要一个能交的文档时，`ensp report` 把这次运行的事实写成一份 Word 文档：
+
+```console
+$ ensp report ospf-single --topology lab.topo --out ospf-single.docx
+collecting evidence for ospf-single from lab.topo
+  checking neighbour-full on R1
+  checking ospf-route on R1
+wrote ospf-single.docx (7169 bytes)
+verdict: passed (2 passed, 0 failed, 0 unverified of 2)
+```
+
+文档固定六章：实验目的、拓扑与地址规划、配置思路与命令、验证结果、问题与结论、附录。
+
+内容全部来自这次运行，不是模板填空：
+
+| 章节 | 来源 |
+|---|---|
+| 拓扑与地址规划 | 读 `.topo` 的设备、链路与控制台端口，地址表取自场景蓝图 |
+| 配置思路与命令 | 每台设备执行 `display current-configuration`，收录设备上实际生效的配置 |
+| 验证结果 | 重跑该场景的验收断言，把每条命令的完整输出原文抄进文档 |
+| 问题与结论 | 场景的易错点，加上本次的验证结论 |
+
+配置原文取自设备而不取下发过的 `.cfg` 文件：文件说的是打算配什么，设备说的是配成了什么，两者不一致时报告应当记录后者。
+
+结论一章沿用验收的三态。验证通过写「验证通过」；有断言失败写「验证未通过」；场景没有断言时写「本次运行未验证」，并说明该章不能作为达标证明。`ensp report` 只在明确失败时以非零退出码结束，未验证按 0 返回，与 `ensp verify` 的退出码 3 区分开。
+
+文档按需生成，工具不会在实验结束后自行产出文件。要写哪个实验的文档由你指定，对应工具为 `ensp_report`。
 
 ## 安装
 
@@ -284,7 +353,7 @@ ensp status
 }
 ```
 
-提供 15 个工具：`ensp_status`、`ensp_build_topology`、`ensp_open`、`ensp_start`、`ensp_stop`、`ensp_apply`、`ensp_apply_dir`、`ensp_query`、`ensp_probe`、`ensp_doctor`、`ensp_verify`、`ensp_scenarios`、`ensp_scenario`、`ensp_knowledge`、`ensp_preset_config`。
+提供 17 个工具：`ensp_status`、`ensp_build_topology`、`ensp_open`、`ensp_start`、`ensp_stop`、`ensp_apply`、`ensp_apply_dir`、`ensp_query`、`ensp_probe`、`ensp_show`、`ensp_images`、`ensp_doctor`、`ensp_verify`、`ensp_report`、`ensp_scenarios`、`ensp_scenario`、`ensp_preset_config`。
 
 ## 环境要求
 
@@ -296,7 +365,7 @@ ensp status
 | DSH | 0.2.0 到 0.3.0 之前的版本（`engines.dsh` 决定兼容性） |
 | 权限 | 以管理员身份运行本工具与 eNSP，两者需为同一权限级别 |
 
-eNSP 与 VirtualBox 的安装位置自动探测：先看 `--exe` / `--vbox`，再看 `DSH_ENSP_EXE` / `DSH_VBOX` 环境变量，再看注册表 `HKLM\SOFTWARE\Huawei\eNSP`，最后看常见安装根目录与 `PATH`。装在非默认盘符时不必手工配置，探测失败会列出每一个尝试过的位置及其来源。
+eNSP 与 VirtualBox 的安装位置自动探测：先看 `--exe` / `--vbox`，再看 `DSH_ENSP_EXE` / `DSH_VBOX` 环境变量，再看注册表，再看常见安装根目录与 `PATH`。注册表读的是安装程序实际写入的位置：eNSP 在卸载项 `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\eNSP` 的 `InstallPath`，VirtualBox 在 `HKLM\SOFTWARE\Oracle\VirtualBox` 的 `InstallDir`。装在非默认盘符时不必手工配置，探测失败会列出每一个尝试过的位置及其来源。
 
 系统缩放设为 125% 或 150% 时，程序会自行完成坐标换算，不需要手动调分辨率。若 eNSP 升级后按钮位置改变，执行 `ensp probe` 重新标定。
 
@@ -310,6 +379,7 @@ ensp preset ospf-single --topo lab.topo   # 生成拓扑
 ensp up lab.topo                 # 启动设备
 ensp apply ./configs --topology lab.topo --save
 ensp verify ospf-single --topology lab.topo   # 按场景断言验收
+ensp report ospf-single --topology lab.topo --out ospf-single.docx   # 产出实验报告
 ensp stop
 ```
 

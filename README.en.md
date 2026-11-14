@@ -58,8 +58,11 @@ Locates the toolbar buttons automatically, so nothing has to be clicked by hand.
 ```bash
 ensp probe          # re-calibrate the button positions
 ensp up lab.topo    # open, start, confirm each device, minimise
+ensp show           # bring the window back whenever you want it
 ensp stop           # shut every device down
 ```
+
+The window stays minimised while devices boot and while configuration is pushed, so nothing steals the foreground. When you want to look at the devices or change something by hand, `ensp show` restores the window and brings it to the front; minimise it again afterwards and the run continues unaffected. The command only touches the window, not the topology or the devices.
 
 eNSP allows only one instance. An abnormal exit can leave a zombie process with no threads, which keeps holding the single-instance lock and makes the next start open a blank window. The tool identifies and clears such processes before starting.
 
@@ -118,12 +121,22 @@ ensp preset campus-network --topo campus.topo   # write that topology
 
 Each preset provides three things: the objects to create, the configuration order, and the commands that confirm the result. The actual commands are filled in per device.
 
-Presets ship with a topology blueprint: devices, links and addressing are ready, and `--topo` writes a `.topo` that eNSP opens, with no drawing or address planning needed. Blueprints contain no configuration commands, so a preset remains a skeleton.
+Presets ship with a topology blueprint: devices, links and addressing are ready, and `--topo` writes a `.topo` that eNSP opens, with no drawing or address planning needed.
 
 ```bash
 ensp preset ospf-single --topo ospf-single.topo
 ensp up ospf-single.topo
 ```
+
+The addressing plan can also become commands. `--config` prints the interface and address blocks for each device in the preset. The scope is the addressing plan only: routing protocols, ACLs and VRRP are the exercise itself, so the preset does not write them for you.
+
+```bash
+ensp preset ospf-single --config                 # one block per device
+ensp preset ospf-single --config ./configs       # one .cfg per device, ready for ensp apply
+ensp preset ospf-single --config --json          # the printed form, for scripts
+```
+
+45 of the 50 blueprints carry addresses. The five layer 2 presets (`vlan-access`, `trunk-interconnect`, `link-aggregation`, `port-security`, `port-isolation`) have VLANs and ports but nothing to address, and `--config` says so rather than emitting an empty script.
 
 The preset catalogue and the blueprints are both generated and checked. `docs/SCENARIOS.md` is rendered from `src/core/presets.mjs` and `src/core/labs.mjs`; `npm run docs:check` returns non-zero when the two disagree, and CI runs the same check.
 
@@ -131,17 +144,6 @@ The preset catalogue and the blueprints are both generated and checked. `docs/SC
 npm run docs          # regenerate docs/SCENARIOS.md
 npm run docs:check    # check whether it is stale
 ```
-
-### Knowledge points
-
-A scenario gives direction, not commands, so the vocabulary of the lab has to come from somewhere. `src/core/knowledge.json` holds knowledge points filed by topic: each scenario ends with a few question-and-answer pairs on the same subject, covering things like which LSA belongs to which area, which attribute decides a BGP path, and which port role only MSTP has.
-
-```bash
-ensp preset ospf-lsa-types          # the detail ends with a knowledge section
-ensp preset --knowledge LSA         # search the index by keyword
-```
-
-The points are grouped by topic by hand: each one is a checkable statement rather than a copied entry. The index keeps only the stem and the correct option text; the source material is not shipped.
 
 ### Manual chapter index
 
@@ -173,6 +175,26 @@ This is not a bug in the topology: eNSP opens it, renders it, then quits. ...
 ```
 
 `ensp preset ... --topo` prints the same warning, and `ensp_build_topology` returns `unsupportedDevices`. The check only reads local files and does not start eNSP. Per-scenario device lists appear in [docs/SCENARIOS.md](docs/SCENARIOS.md) under the device image line.
+
+Where an image belongs is decided by each model's VirtualBox template, not by a fixed path. `ensp images` reads the disk path out of the template and checks whether the file is there:
+
+```console
+$ ensp images
+USG6000V: missing E:\Huawei\eNSP\plugin\ngfw\DataBase\vfw_usg.vdi
+NE40E: missing E:\Huawei\eNSP\plugin\ne\Database\NE40E.img
+...
+```
+
+Once you have the image file, one command puts it where this particular machine looks for it and points the plugin's `system.ini` at it:
+
+```console
+$ ensp images USG6000V --install D:/downloads/vfw_usg.vdi
+installed USG6000V → E:\Huawei\eNSP\plugin\ngfw\DataBase\vfw_usg.vdi (1429741568 bytes)
+ImgFile updated in the plugin system.ini
+restart eNSP if it is already running
+```
+
+The destination comes from the template, so it is correct on a machine that installed eNSP somewhere else. Images are never shipped with this package and never downloaded: the source is a file you already have. A check-only run exits 1 when something is missing, which makes it usable at the top of a startup script.
 
 ### Window occlusion check
 
@@ -207,8 +229,8 @@ When a start fails, locating the faulty item usually costs more than fixing it. 
 
 ```console
 $ ensp doctor --topology lab.topo
-[ok  ] ensp-installed: E:\\Huawei\\eNSP\\eNSP_Client.exe
-[ok  ] virtualbox: E:\\VirtualBox\\VBoxManage.exe
+[ok  ] ensp-installed: C:\Program Files\Huawei\eNSP\eNSP_Client.exe
+[ok  ] virtualbox: C:\Program Files\Oracle\VirtualBox\VBoxManage.exe
 [ok  ] console-ports: 2000-2100 free
 [warn] memory: 949 MB free (each router needs ~256 MB)
        fix: Close some applications; devices may boot very slowly or fail to start.
@@ -236,9 +258,26 @@ ospf-single · 单区域 OSPF
 accepted: 2/2 checks passed
 ```
 
-About 30 scenarios have targeted assertions (OSPF needs `Full`, BGP needs `Established`, VRRP needs `Master`/`Backup`, MPLS VPN needs `Established` and a VPN routing table); the rest fall back to running the verification commands listed in the scenario. The decision logic lives in `EXPECTATIONS` in `src/core/acceptance.mjs`, and assertions support `contains`, `notContains`, `matches` and `minLines`. The matching tool is `ensp_verify`, and `ensp_scenario` reports whether a scenario has targeted assertions.
+48 scenarios have targeted assertions (OSPF needs `Full`, BGP needs `Established`, VRRP needs `Master`/`Backup`, MPLS VPN needs `Established` and a VPN routing table). Those reports say `[curated checks]` and every check is judged on its output. The decision logic lives in `EXPECTATIONS` in `src/core/acceptance.mjs`, and assertions support `contains`, `notContains`, `matches` and `minLines`. The matching tool is `ensp_verify`, and `ensp_scenario` reports whether a scenario has targeted assertions.
 
-Device names in assertions map by role to the topology you actually have: blueprints use `R1`/`R2` while course assignments may use `RA`/`RB`/`RC`. Verification takes the first device with a console (`R2` takes the second), so a different name does not change the result.
+The other 2 scenarios have no assertions and only run the verification commands listed in the scenario. The report marks those checks `[skip]`, ends with `unverified`, and exits with code 3 rather than counting them as passes:
+
+```console
+$ ensp verify firewall-hrp --topology lab.topo
+firewall-hrp · 防火墙双机热备（HRP）
+[smoke checks]
+[skip] smoke-1 on FW1: display hrp state
+         no assertion: this command only had to run
+[skip] smoke-2 on FW1: display vrrp
+         no assertion: this command only had to run
+[skip] smoke-3 on FW1: display session table
+         no assertion: this command only had to run
+
+unverified: 3/3 checks had no assertion, 0 passed. Nothing contradicted the expected state, but no output was checked either.
+```
+
+Device names in assertions match by device family to the topology you actually have: blueprints use `R1`/`R2` while course assignments may use `RA`/`RB`/`RC`. Verification takes the Nth device in the same prefix family (`R2` takes the second `R*`). When the family has no such name the report says `no console port for device "..."` instead of silently substituting a different device.
+
 
 Failed assertions are retried automatically. Routing protocols converge after the command returns, and right after `ensp apply` an OSPF neighbour is usually still in `ExStart` or `2-Way`, so a single sample would report a working lab as broken. The default wait is 60 seconds, `--wait` changes it, and a pass records how long it actually waited:
 
@@ -253,6 +292,36 @@ $ ensp verify ospf-single --topology lab.topo
 Two kinds of failure skip the retry loop because retrying changes nothing: an unreachable console (device not started) and a command VRP rejects (wrong command). The former reports `console unreachable: ... ECONNREFUSED`, the latter reports `VRP rejected the command`; neither is disguised as an assertion mismatch.
 
 The recommended order is `doctor`, `up`, `verify`: doctor decides the environment, up decides the devices, verify decides the configuration effect.
+
+### Lab report
+
+When a finished lab needs a document you can hand in, `ensp report` writes this run out as a Word file:
+
+```console
+$ ensp report ospf-single --topology lab.topo --out ospf-single.docx
+collecting evidence for ospf-single from lab.topo
+  checking neighbour-full on R1
+  checking ospf-route on R1
+wrote ospf-single.docx (7169 bytes)
+verdict: passed (2 passed, 0 failed, 0 unverified of 2)
+```
+
+The document has six fixed chapters: goal, topology and addressing, configuration and command list, verification results, problems and conclusion, appendix.
+
+Everything comes from this run rather than from a filled-in template:
+
+| Chapter | Source |
+|---|---|
+| Topology and addressing | Devices, links and console ports read from the `.topo`; the address table comes from the scenario blueprint |
+| Configuration and commands | `display current-configuration` on every device, so the document carries the configuration that actually took effect |
+| Verification results | The scenario assertions are re-run and each command's full output is quoted verbatim |
+| Problems and conclusion | The scenario's pitfalls plus this run's verdict |
+
+The configuration is quoted from the device, not from the `.cfg` files that were pushed: the file says what was meant, the device says what took effect, and a report is worth more when it records the latter.
+
+The conclusion chapter keeps the same three states as verification. A passing run says "verification passed"; a failing assertion says "verification failed"; a scenario without assertions says the run was not verified and that the chapter cannot serve as proof. `ensp report` exits non-zero only on a definite failure, leaving unverified at 0 so it stays distinct from the exit code 3 of `ensp verify`.
+
+Reports are produced on request. The tool never writes a file by itself after a lab finishes; you name the scenario you want a document for. The matching tool is `ensp_report`.
 
 ## Installation
 
@@ -284,7 +353,7 @@ ensp status
 }
 ```
 
-15 tools are provided: `ensp_status`, `ensp_build_topology`, `ensp_open`, `ensp_start`, `ensp_stop`, `ensp_apply`, `ensp_apply_dir`, `ensp_query`, `ensp_probe`, `ensp_doctor`, `ensp_verify`, `ensp_scenarios`, `ensp_scenario`, `ensp_knowledge` and `ensp_preset_config`.
+17 tools are provided: `ensp_status`, `ensp_build_topology`, `ensp_open`, `ensp_start`, `ensp_stop`, `ensp_apply`, `ensp_apply_dir`, `ensp_query`, `ensp_probe`, `ensp_show`, `ensp_images`, `ensp_doctor`, `ensp_verify`, `ensp_report`, `ensp_scenarios`, `ensp_scenario` and `ensp_preset_config`.
 
 ## Requirements
 
@@ -296,7 +365,7 @@ ensp status
 | DSH | 0.2.0 up to but not including 0.3.0 (`engines.dsh` decides compatibility) |
 | Privileges | Run both this tool and eNSP as administrator, at the same integrity level |
 
-The eNSP and VirtualBox install locations are detected automatically: `--exe` / `--vbox` first, then the `DSH_ENSP_EXE` / `DSH_VBOX` environment variables, then the `HKLM\SOFTWARE\Huawei\eNSP` registry key, then the usual install roots and `PATH`. Nothing needs configuring when either is installed on another drive, and a failed lookup lists every location it tried together with where that location came from.
+The eNSP and VirtualBox install locations are detected automatically: `--exe` / `--vbox` first, then the `DSH_ENSP_EXE` / `DSH_VBOX` environment variables, then the registry, then the usual install roots and `PATH`. The registry entries read are the ones the installers actually write: eNSP under `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\eNSP` as `InstallPath`, VirtualBox under `HKLM\SOFTWARE\Oracle\VirtualBox` as `InstallDir`. Nothing needs configuring when either is installed on another drive, and a failed lookup lists every location it tried together with where that location came from.
 
 At 125% or 150% display scaling the tool converts coordinates itself, so no resolution change is needed. If an eNSP upgrade moves the buttons, run `ensp probe` to re-calibrate.
 
@@ -310,6 +379,7 @@ ensp preset ospf-single --topo lab.topo   # write a topology
 ensp up lab.topo                 # start the devices
 ensp apply ./configs --topology lab.topo --save
 ensp verify ospf-single --topology lab.topo   # verify against the scenario
+ensp report ospf-single --topology lab.topo --out ospf-single.docx   # write the lab report
 ensp stop
 ```
 
