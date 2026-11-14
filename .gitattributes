@@ -1,0 +1,12 @@
+# Keep line endings as authored. .editorconfig already says LF; this file makes
+# Git honour it on Windows checkouts too, where core.autocrlf would otherwise
+# rewrite every file to CRLF and make source-shape assertions fail.
+* text=auto eol=lf
+
+*.png binary
+*.webp binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.vdi binary
+*.img binary

@@ -181,7 +181,9 @@ if (invokedDirectly) {
     } catch {
       current = ''
     }
-    if (current !== next) {
+    // A checkout with core.autocrlf gives CRLF for a file stored with LF, and the
+    // generator always emits LF. Compare the text, not the line endings.
+    if (current.replace(/\r\n/g, '\n') !== next) {
       console.error('docs/SCENARIOS.md is stale; run `node scripts/gen-scenarios-doc.mjs`')
       process.exit(1)
     }
