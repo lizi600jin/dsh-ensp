@@ -40,6 +40,13 @@ import { buildDocx, zip } from '../src/core/docx.mjs'
 import { buildReportBlocks, collectEvidence, writeReport } from '../src/core/report.mjs'
 import { docxText } from '../src/core/ooxml.mjs'
 
+// Source-shape assertions match on newlines, so the file has to be read the same
+// way on every machine. A Windows checkout with core.autocrlf gives CRLF, which
+// silently breaks any pattern that spans a line break.
+function sourceOf(relative) {
+  return readFileSync(new URL(relative, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+}
+
 test('viewOf: hostnames containing hyphens are still system view', () => {
   // Real failure: `[R1-TEST]` was classified as a sub-view because it contains a
   // dash, so the driver tried to `quit` out of system view and corrupted the batch.
@@ -596,7 +603,7 @@ test('a refused click reports the occluding process instead of succeeding', () =
   // and startAllDevices throws rather than waiting on consoles that will never
   // open. Only the pure shape of that contract is asserted here, because the
   // real path needs a live eNSP and a second window on top of it.
-  const source = readFileSync(new URL('../src/core/launcher.mjs', import.meta.url), 'utf8')
+  const source = sourceOf('../src/core/launcher.mjs')
   assert.match(source, /WindowFromPoint/, 'the click point owner must be queried')
   assert.match(source, /GetAncestor/, 'the point must be resolved to its top-level window')
   assert.match(source, /occludedBy/, 'a blocked click must name the blocking process')
@@ -604,7 +611,7 @@ test('a refused click reports the occluding process instead of succeeding', () =
 })
 
 test('calibration refuses to run on an occluded window', () => {
-  const source = readFileSync(new URL('../src/core/launcher.mjs', import.meta.url), 'utf8')
+  const source = sourceOf('../src/core/launcher.mjs')
   const body = source.slice(source.indexOf('export async function startAllDevices'))
   assert.match(body, /checkOcclusion\(hwnd\)/, 'the window must be checked for occlusion before calibrating')
   assert.ok(
@@ -770,7 +777,7 @@ test('an unreachable console is reported as such, not as a failed assertion', as
   // Real failure in the first version: verify pointed at a topology whose devices
   // were never started, and reported "not contains Full" on every check. That sends
   // the reader into OSPF while the actual problem is that nothing is listening.
-  const source = readFileSync(new URL('../src/core/acceptance.mjs', import.meta.url), 'utf8')
+  const source = sourceOf('../src/core/acceptance.mjs')
   assert.match(source, /res\?\.ok === false/, 'queryDevice ok:false must be detected')
   assert.match(source, /console unreachable/, 'that case must be named in the verdict')
 })
@@ -1028,7 +1035,7 @@ test('the console session only accepts a prompt after the command echo', () => {
   // Reported symptom: `apply` printed 16/16 while Vlanif10 was never created.
   // A prompt left over from the previous command satisfied the prompt match, so
   // the caller read a stale view and the next command went into a sub-view.
-  const source = readFileSync(new URL('../src/core/console.mjs', import.meta.url), 'utf8')
+  const source = sourceOf('../src/core/console.mjs')
   assert.match(source, /#readToPrompt\(timeoutMs, settleMs = 60, echo = null\)/, 'echo parameter must exist')
   assert.match(source, /const sawEcho = !echo \|\| text\.includes\(echo\)/, 'prompt match must require the echo')
   assert.match(source, /const echo = command\.split\(/, 'exec must derive the echo from the command')
@@ -1234,7 +1241,7 @@ test('the installer registry is consulted before the usual roots', async () => {
   // does not assert that such an entry exists here: it asserts the source code
   // reads that key at all, which is what a machine with a non-standard install
   // depends on.
-  const source = readFileSync(new URL('../src/core/paths.mjs', import.meta.url), 'utf8')
+  const source = sourceOf('../src/core/paths.mjs')
   assert.ok(
     /CurrentVersion\\+Uninstall\\+eNSP/.test(source),
     'the uninstall key Inno Setup writes must be read',
@@ -1546,7 +1553,7 @@ test('the render gate counts devices instead of counting pixels', () => {
   // never rendered, while the welcome page scored high enough to count as one.
   // The gate must therefore be structural: eNSP gives each canvas device a hidden
   // Edit child, and the count has to reach the window API rather than the canvas.
-  const source = readFileSync(new URL('../src/core/launcher.mjs', import.meta.url), 'utf8')
+  const source = sourceOf('../src/core/launcher.mjs')
   assert.match(source, /export function canvasDeviceCount\(hwnd\)/)
   assert.match(source, /export function topologyRendered\(hwnd\) \{\n  return canvasDeviceCount\(hwnd\) >= 1\n\}/)
   assert.doesNotMatch(source, /icon >= 15 && dark >= 40/, 'the pixel threshold must be gone')
